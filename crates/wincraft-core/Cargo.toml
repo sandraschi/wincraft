@@ -1,0 +1,19 @@
+[package]
+name = "wincraft-core"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "L1 core for WinCraft: Windows processes, port map, RAM weeder, Restart Manager file-lock inspector, high-speed fileops, NSSM-safe services, and auto-backed-up registry ops"
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+chrono = { workspace = true }
+uuid = { workspace = true }
+zip = { workspace = true }
+
+[dev-dependencies]
+tempfile = { workspace = true }
+
+[lints]
+workspace = true
