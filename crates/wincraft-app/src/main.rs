@@ -1,11 +1,18 @@
 //! `wincraft-app`: L3 native `eframe`/`egui` desktop workstation for WinCraft.
 //! Calls `wincraft_core::dispatch` directly in-process (zero network/port overhead).
-//! All collection outputs default to Cards view and are switchable between Cards, List (table),
-//! and JSON, with live filtering, column sorting, pagination, and one-click export to CSV, MD, TXT, or JSON.
+//! Features:
+//! - Custom dark obsidian/cyan/emerald visual theme + live KPI telemetry ribbon
+//! - Default Cards view switchable to List (table) and JSON
+//! - Contextual quick actions on Cards & Rows (Browse in FileOps, Find Large Files,
+//!   Inspect File Locks, Compute SHA-256, Reap Orphan PID, Control NSSM Services)
+//! - Visual disk capacity & process memory progress bars + color-coded status badges
+//! - Live substring filtering, numeric-aware column sorting, pagination, and CSV/MD/TXT/JSON export
+//! - One-click launchers for the repository's PDF and EPUB brochures (`docs/brochure/`)
 
-use eframe::egui;
+use eframe::egui::{self, Color32, CornerRadius, RichText, Stroke};
 use serde_json::{json, Value};
 use std::path::PathBuf;
+use std::process::Command as ProcessCommand;
 use std::time::{SystemTime, UNIX_EPOCH};
 use wincraft_core::{
     dispatch, filter_sort_paginate, payload_to_tabular, render_tabular, tools_catalog, Command,
@@ -27,20 +34,33 @@ enum Page {
 impl Page {
     fn label(self) -> &'static str {
         match self {
-            Page::Dashboard => "1. Host & Disks",
-            Page::ProcsAndPorts => "2. Processes & Ports",
-            Page::RamWeeder => "3. RAM Weeder",
-            Page::FileOps => "4. High-Speed FileOps",
-            Page::LockInspector => "5. Who Locks This File?",
-            Page::ServicesNssm => "6. Services & NSSM",
-            Page::StartupAndRegistry => "7. Startup & Registry",
-            Page::DoctorAndHelp => "8. Doctor & Tools (26)",
+            Page::Dashboard => "🖴 1. Host & Disks",
+            Page::ProcsAndPorts => "⚡ 2. Processes & Ports",
+            Page::RamWeeder => "🧹 3. RAM Weeder",
+            Page::FileOps => "📂 4. High-Speed FileOps",
+            Page::LockInspector => "🔒 5. Who Locks This File?",
+            Page::ServicesNssm => "⚙ 6. Services & NSSM",
+            Page::StartupAndRegistry => "🔑 7. Startup & Registry",
+            Page::DoctorAndHelp => "🩺 8. Doctor, Tools & Brochure",
         }
     }
 }
 
+#[derive(Debug, Clone)]
+enum PendingAction {
+    BrowseMount(String),
+    LargeFilesMount(String),
+    DupsMount(String),
+    InspectLockPath(String),
+    HashFilePath(String),
+    FilterProcessPid(String),
+    ReapPid(u32),
+    ServiceControl { name: String, action: String },
+}
+
 pub struct WinCraftApp {
     opts: ExecOptions,
+    theme_applied: bool,
     page: Page,
     view_mode: OutputFormat,
     table_filter: String,
@@ -48,7 +68,9 @@ pub struct WinCraftApp {
     sort_asc: bool,
     page_num: usize,
     page_size: usize,
+    arm_confirm: bool,
     export_dir: PathBuf,
+    brochure_dir: PathBuf,
     status_json: Option<Value>,
     doctor_json: Option<Value>,
     procs_json: Option<Value>,
@@ -84,21 +106,25 @@ impl Default for WinCraftApp {
             &opts,
         )
         .ok();
+        let weeder_json = dispatch(&Command::WeederScan, &opts).ok();
         Self {
             opts,
+            theme_applied: false,
             page: Page::Dashboard,
-            view_mode: OutputFormat::Cards, // Default is Cards per user specification
+            view_mode: OutputFormat::Cards,
             table_filter: String::new(),
             sort_col: 0,
             sort_asc: true,
             page_num: 1,
             page_size: 25,
+            arm_confirm: false,
             export_dir: PathBuf::from(r"D:\Dev\repos\wincraft\exports"),
+            brochure_dir: PathBuf::from(r"D:\Dev\repos\wincraft\docs\brochure"),
             status_json,
             doctor_json,
             procs_json,
             ports_json: None,
-            weeder_json: None,
+            weeder_json,
             fileops_json: None,
             lock_json: None,
             services_json: None,
@@ -113,11 +139,42 @@ impl Default for WinCraftApp {
             svc_filter: String::new(),
             reg_key: r"HKCU\Environment".to_string(),
             last_message:
-                "Ready — Default view: Cards (switchable to List/JSON, paginated, sortable, filterable, exportable)."
+                "Ready — Cards view active (switchable to List/JSON, sortable, filterable, paginated, exportable)."
                     .to_string(),
             show_help_modal: false,
         }
     }
+}
+
+fn apply_craft_theme(ctx: &egui::Context) {
+    let mut visuals = egui::Visuals::dark();
+    visuals.panel_fill = Color32::from_rgb(13, 17, 23);
+    visuals.window_fill = Color32::from_rgb(18, 23, 33);
+    visuals.extreme_bg_color = Color32::from_rgb(9, 12, 17);
+    visuals.faint_bg_color = Color32::from_rgb(22, 29, 41);
+    visuals.widgets.noninteractive.bg_fill = Color32::from_rgb(20, 26, 36);
+    visuals.widgets.noninteractive.bg_stroke = Stroke::new(1.0, Color32::from_rgb(42, 54, 74));
+    visuals.widgets.noninteractive.corner_radius = CornerRadius::same(6);
+    visuals.widgets.inactive.bg_fill = Color32::from_rgb(28, 37, 52);
+    visuals.widgets.inactive.corner_radius = CornerRadius::same(6);
+    visuals.widgets.hovered.bg_fill = Color32::from_rgb(38, 56, 82);
+    visuals.widgets.hovered.corner_radius = CornerRadius::same(6);
+    visuals.widgets.active.bg_fill = Color32::from_rgb(14, 116, 144);
+    visuals.widgets.active.corner_radius = CornerRadius::same(6);
+    visuals.selection.bg_fill = Color32::from_rgb(14, 116, 144);
+    visuals.selection.stroke = Stroke::new(1.0, Color32::from_rgb(103, 232, 249));
+    ctx.set_visuals(visuals);
+}
+
+fn badge(ui: &mut egui::Ui, text: &str, fg: Color32, bg: Color32) {
+    egui::Frame::new()
+        .fill(bg)
+        .stroke(Stroke::new(1.0, fg.gamma_multiply(0.5)))
+        .corner_radius(CornerRadius::same(4))
+        .inner_margin(egui::Margin::symmetric(6, 2))
+        .show(ui, |ui| {
+            ui.label(RichText::new(text).color(fg).small().strong());
+        });
 }
 
 impl WinCraftApp {
@@ -134,6 +191,208 @@ impl WinCraftApp {
                 Err(msg)
             }
         }
+    }
+
+    fn open_external_file(&mut self, path: &std::path::Path) {
+        if !path.exists() {
+            self.last_message = format!("File not found: {}", path.display());
+            return;
+        }
+        let res = ProcessCommand::new("cmd")
+            .args(["/C", "start", "", &path.to_string_lossy()])
+            .spawn();
+        match res {
+            Ok(_) => {
+                self.last_message = format!("Opened {}", path.display());
+            }
+            Err(e) => {
+                self.last_message = format!("Failed to open {}: {e}", path.display());
+            }
+        }
+    }
+
+    fn handle_pending_action(&mut self, action: PendingAction) {
+        match action {
+            PendingAction::BrowseMount(mount) => {
+                self.target_path = mount.clone();
+                self.page = Page::FileOps;
+                self.fileops_json = self
+                    .exec(&Command::FsList {
+                        path: PathBuf::from(&mount),
+                        recursive: false,
+                        depth: 1,
+                    })
+                    .ok();
+            }
+            PendingAction::LargeFilesMount(mount) => {
+                self.target_path = mount.clone();
+                self.page = Page::FileOps;
+                self.fileops_json = self
+                    .exec(&Command::FsLarge {
+                        path: PathBuf::from(&mount),
+                        min_size_bytes: 10 * 1024 * 1024,
+                        limit: 50,
+                        skip_build_dirs: true,
+                    })
+                    .ok();
+            }
+            PendingAction::DupsMount(mount) => {
+                self.target_path = mount.clone();
+                self.page = Page::FileOps;
+                self.fileops_json = self
+                    .exec(&Command::FsDups {
+                        path: PathBuf::from(&mount),
+                        skip_build_dirs: true,
+                    })
+                    .ok();
+            }
+            PendingAction::InspectLockPath(path) => {
+                self.lock_path = path.clone();
+                self.page = Page::LockInspector;
+                self.lock_json = self
+                    .exec(&Command::LockInspect {
+                        path: PathBuf::from(&path),
+                    })
+                    .ok();
+            }
+            PendingAction::HashFilePath(path) => {
+                if let Ok(res) = self.exec(&Command::FsHash {
+                    path: PathBuf::from(&path),
+                }) {
+                    let sha = res
+                        .get("sha256")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("unknown");
+                    self.last_message = format!("SHA-256 ({path}): {sha}");
+                }
+            }
+            PendingAction::FilterProcessPid(pid) => {
+                self.table_filter = pid;
+                self.page_num = 1;
+            }
+            PendingAction::ReapPid(pid) => {
+                if let Ok(res) = self.exec(&Command::WeederReap {
+                    pid,
+                    confirm: self.arm_confirm,
+                }) {
+                    self.last_message = format!("Reaped PID {pid}: {res}");
+                    self.weeder_json = self.exec(&Command::WeederScan).ok();
+                }
+            }
+            PendingAction::ServiceControl { name, action } => {
+                if let Ok(res) = self.exec(&Command::SvcControl {
+                    name: name.clone(),
+                    action: action.clone(),
+                    confirm: self.arm_confirm,
+                }) {
+                    let ok = res
+                        .get("success")
+                        .and_then(|v| v.as_bool())
+                        .unwrap_or(false);
+                    self.last_message = format!("Service {name} ({action}): success={ok}");
+                }
+            }
+        }
+    }
+
+    fn render_kpi_ribbon(&mut self, ui: &mut egui::Ui) {
+        let (disks_count, max_disk_pct, procs_count, weeder_count, weeder_mb, dead_path_count) =
+            if let Some(ref st) = self.status_json {
+                let disks = st.get("disks").and_then(|v| v.as_array());
+                let d_cnt = disks.map(|a| a.len()).unwrap_or(0);
+                let max_pct = disks
+                    .map(|arr| {
+                        arr.iter()
+                            .filter_map(|d| d.get("used_percent").and_then(|v| v.as_f64()))
+                            .fold(0.0_f64, f64::max)
+                    })
+                    .unwrap_or(0.0);
+                let p_cnt = st
+                    .get("running_processes")
+                    .and_then(|v| v.as_u64())
+                    .unwrap_or(0);
+                let w_cnt = st
+                    .pointer("/weeder_summary/candidate_count")
+                    .and_then(|v| v.as_u64())
+                    .unwrap_or(0);
+                let w_mb = st
+                    .pointer("/weeder_summary/reclaimable_mb")
+                    .and_then(|v| v.as_f64())
+                    .unwrap_or(0.0);
+                let dp_cnt = st
+                    .pointer("/path_health/dead_entries_count")
+                    .and_then(|v| v.as_u64())
+                    .unwrap_or(0);
+                (d_cnt, max_pct, p_cnt, w_cnt, w_mb, dp_cnt)
+            } else {
+                (0, 0.0, 0, 0, 0.0, 0)
+            };
+
+        ui.horizontal_wrapped(|ui| {
+            let disk_color = if max_disk_pct >= 95.0 {
+                Color32::from_rgb(248, 113, 113)
+            } else if max_disk_pct >= 85.0 {
+                Color32::from_rgb(251, 191, 36)
+            } else {
+                Color32::from_rgb(52, 211, 153)
+            };
+            badge(
+                ui,
+                &format!("🖴 {disks_count} Volumes (peak {max_disk_pct:.1}%)"),
+                disk_color,
+                Color32::from_rgb(20, 30, 42),
+            );
+            badge(
+                ui,
+                &format!("⚡ {procs_count} Processes"),
+                Color32::from_rgb(56, 189, 248),
+                Color32::from_rgb(17, 28, 44),
+            );
+            let weeder_color = if weeder_count > 0 {
+                Color32::from_rgb(251, 191, 36)
+            } else {
+                Color32::from_rgb(52, 211, 153)
+            };
+            badge(
+                ui,
+                &format!("🧹 Weeder: {weeder_count} orphans ({weeder_mb:.1} MB)"),
+                weeder_color,
+                Color32::from_rgb(28, 25, 18),
+            );
+            let path_color = if dead_path_count > 0 {
+                Color32::from_rgb(251, 191, 36)
+            } else {
+                Color32::from_rgb(52, 211, 153)
+            };
+            badge(
+                ui,
+                &format!("🛣 Dead PATH entries: {dead_path_count}"),
+                path_color,
+                Color32::from_rgb(22, 27, 36),
+            );
+            if self.opts.read_only {
+                badge(
+                    ui,
+                    "🛡 READ-ONLY LOCKED",
+                    Color32::from_rgb(251, 191, 36),
+                    Color32::from_rgb(45, 30, 12),
+                );
+            } else if self.arm_confirm {
+                badge(
+                    ui,
+                    "⚠ MUTATIONS ARMED (confirm=true)",
+                    Color32::from_rgb(248, 113, 113),
+                    Color32::from_rgb(48, 18, 22),
+                );
+            } else {
+                badge(
+                    ui,
+                    "🛡 SAFE MODE (confirm=false)",
+                    Color32::from_rgb(52, 211, 153),
+                    Color32::from_rgb(14, 36, 28),
+                );
+            }
+        });
     }
 
     fn render_dataset_controls_and_body(
@@ -163,7 +422,7 @@ impl WinCraftApp {
         // Control Bar 1: View Mode (Cards [default] | List | JSON), Filter, and Export (CSV | MD | TXT | JSON)
         ui.group(|ui| {
             ui.horizontal_wrapped(|ui| {
-                ui.label("View:");
+                ui.label(RichText::new("View:").strong());
                 if ui
                     .selectable_label(self.view_mode == OutputFormat::Cards, "🗂 Cards (Default)")
                     .clicked()
@@ -184,18 +443,18 @@ impl WinCraftApp {
                 }
 
                 ui.separator();
-                ui.label("Filter:");
+                ui.label(RichText::new("🔍 Filter:").strong());
                 let filter_resp = ui.text_edit_singleline(&mut self.table_filter);
                 if filter_resp.changed() {
                     self.page_num = 1;
                 }
-                if !self.table_filter.is_empty() && ui.button("Clear").clicked() {
+                if !self.table_filter.is_empty() && ui.button("✕ Clear").clicked() {
                     self.table_filter.clear();
                     self.page_num = 1;
                 }
 
                 ui.separator();
-                ui.label("Export:");
+                ui.label(RichText::new("📤 Export:").strong());
                 for (btn_label, ext, fmt) in [
                     ("CSV", "csv", OutputFormat::Csv),
                     ("MD", "md", OutputFormat::Md),
@@ -237,11 +496,16 @@ impl WinCraftApp {
                         }
                     }
                 }
+                if ui.button("📂 Open Exports Folder").clicked() {
+                    let _ = std::fs::create_dir_all(&self.export_dir);
+                    let dir = self.export_dir.clone();
+                    self.open_external_file(&dir);
+                }
             });
 
             // Control Bar 2: Sorting & Pagination
             ui.horizontal_wrapped(|ui| {
-                ui.label("Sort by:");
+                ui.label(RichText::new("⇅ Sort:").strong());
                 for (idx, h) in tab.headers.iter().enumerate() {
                     let active = self.sort_col == idx;
                     let arrow = if active {
@@ -265,7 +529,7 @@ impl WinCraftApp {
                 }
 
                 ui.separator();
-                ui.label("Page size:");
+                ui.label(RichText::new("Rows/Page:").strong());
                 for sz in [10usize, 25, 50, 100] {
                     if ui
                         .selectable_label(self.page_size == sz, sz.to_string())
@@ -277,29 +541,36 @@ impl WinCraftApp {
                 }
 
                 ui.separator();
-                if ui.button("<< First").clicked() {
+                if ui.button("⏮ First").clicked() {
                     self.page_num = 1;
                 }
-                if ui.button("< Prev").clicked() && self.page_num > 1 {
+                if ui.button("◀ Prev").clicked() && self.page_num > 1 {
                     self.page_num -= 1;
                 }
-                ui.label(format!(
-                    "Page {} / {} ({} of {} items)",
-                    self.page_num,
-                    total_pages,
-                    paged_tab.rows.len(),
-                    total_rows
-                ));
-                if ui.button("Next >").clicked() && self.page_num < total_pages {
+                badge(
+                    ui,
+                    &format!(
+                        "Page {} / {} ({} of {} items)",
+                        self.page_num,
+                        total_pages,
+                        paged_tab.rows.len(),
+                        total_rows
+                    ),
+                    Color32::from_rgb(103, 232, 249),
+                    Color32::from_rgb(15, 28, 42),
+                );
+                if ui.button("Next ▶").clicked() && self.page_num < total_pages {
                     self.page_num += 1;
                 }
-                if ui.button("Last >>").clicked() {
+                if ui.button("Last ⏭").clicked() {
                     self.page_num = total_pages;
                 }
             });
         });
 
-        ui.add_space(4.0);
+        ui.add_space(6.0);
+
+        let mut pending: Option<PendingAction> = None;
 
         // Dataset Content Rendering
         match self.view_mode {
@@ -311,7 +582,7 @@ impl WinCraftApp {
             OutputFormat::List => {
                 egui::Grid::new(format!("grid_{dataset_slug}"))
                     .striped(true)
-                    .spacing([14.0, 6.0])
+                    .spacing([14.0, 7.0])
                     .show(ui, |ui| {
                         for (idx, h) in paged_tab.headers.iter().enumerate() {
                             let arrow = if self.sort_col == idx {
@@ -323,7 +594,10 @@ impl WinCraftApp {
                             } else {
                                 ""
                             };
-                            if ui.button(format!("{h}{arrow}")).clicked() {
+                            if ui
+                                .button(RichText::new(format!("{h}{arrow}")).strong())
+                                .clicked()
+                            {
                                 if self.sort_col == idx {
                                     self.sort_asc = !self.sort_asc;
                                 } else {
@@ -333,42 +607,83 @@ impl WinCraftApp {
                                 self.page_num = 1;
                             }
                         }
+                        ui.label(RichText::new("Quick Actions").strong());
                         ui.end_row();
 
                         for row in &paged_tab.rows {
                             for cell in row {
                                 ui.monospace(cell);
                             }
+                            ui.horizontal(|ui| {
+                                Self::render_row_quick_actions(ui, dataset_slug, row, &mut pending);
+                            });
                             ui.end_row();
                         }
                     });
             }
             OutputFormat::Cards | OutputFormat::Csv | OutputFormat::Md | OutputFormat::Txt => {
-                // Multi-card responsive grid (2 cards per row)
                 let start_idx = (self.page_num.saturating_sub(1)) * self.page_size + 1;
                 egui::Grid::new(format!("cards_{dataset_slug}"))
                     .num_columns(2)
-                    .spacing([12.0, 10.0])
+                    .spacing([14.0, 12.0])
                     .show(ui, |ui| {
                         for (i, row) in paged_tab.rows.iter().enumerate() {
                             ui.group(|ui| {
-                                ui.set_min_width(480.0);
+                                ui.set_min_width(510.0);
                                 let title_col = row.first().map(|s| s.as_str()).unwrap_or("-");
                                 let second_col = row.get(1).map(|s| s.as_str()).unwrap_or("");
-                                ui.horizontal(|ui| {
-                                    ui.strong(format!("#{} {}", start_idx + i, title_col));
+
+                                // Card Header with status badges
+                                ui.horizontal_wrapped(|ui| {
+                                    badge(
+                                        ui,
+                                        &format!("#{}", start_idx + i),
+                                        Color32::from_rgb(103, 232, 249),
+                                        Color32::from_rgb(14, 33, 48),
+                                    );
+                                    ui.label(
+                                        RichText::new(title_col)
+                                            .size(15.5)
+                                            .strong()
+                                            .color(Color32::from_rgb(240, 246, 252)),
+                                    );
                                     if !second_col.is_empty() {
-                                        ui.separator();
-                                        ui.monospace(second_col);
+                                        ui.label(
+                                            RichText::new(format!("· {second_col}"))
+                                                .monospace()
+                                                .color(Color32::from_rgb(148, 163, 184)),
+                                        );
                                     }
+                                    Self::render_card_badges(ui, dataset_slug, row);
                                 });
+
+                                // Optional visual gauge for Disks & Processes
+                                Self::render_card_gauge(ui, dataset_slug, row);
+
                                 ui.separator();
                                 for (h, val) in paged_tab.headers.iter().zip(row.iter()) {
                                     ui.horizontal_wrapped(|ui| {
-                                        ui.label(format!("{h}:"));
-                                        ui.monospace(val);
+                                        ui.label(
+                                            RichText::new(format!("{h}:"))
+                                                .color(Color32::from_rgb(148, 163, 184)),
+                                        );
+                                        ui.monospace(
+                                            RichText::new(val)
+                                                .color(Color32::from_rgb(226, 232, 240)),
+                                        );
                                     });
                                 }
+
+                                // Contextual Quick Actions footer
+                                ui.separator();
+                                ui.horizontal_wrapped(|ui| {
+                                    Self::render_row_quick_actions(
+                                        ui,
+                                        dataset_slug,
+                                        row,
+                                        &mut pending,
+                                    );
+                                });
                             });
                             if i % 2 == 1 {
                                 ui.end_row();
@@ -377,35 +692,221 @@ impl WinCraftApp {
                     });
             }
         }
+
+        if let Some(act) = pending {
+            self.handle_pending_action(act);
+        }
+    }
+
+    fn render_card_badges(ui: &mut egui::Ui, dataset_slug: &str, row: &[String]) {
+        match dataset_slug {
+            "services" => {
+                let state = row.get(2).map(|s| s.as_str()).unwrap_or("");
+                if state.eq_ignore_ascii_case("RUNNING") {
+                    badge(
+                        ui,
+                        "● RUNNING",
+                        Color32::from_rgb(52, 211, 153),
+                        Color32::from_rgb(12, 38, 28),
+                    );
+                } else {
+                    badge(
+                        ui,
+                        state,
+                        Color32::from_rgb(148, 163, 184),
+                        Color32::from_rgb(30, 36, 46),
+                    );
+                }
+            }
+            "processes" => {
+                let prot = row.get(5).map(|s| s.as_str()).unwrap_or("false");
+                if prot == "true" {
+                    badge(
+                        ui,
+                        "🛡 Protected Host Process",
+                        Color32::from_rgb(251, 191, 36),
+                        Color32::from_rgb(44, 32, 12),
+                    );
+                }
+            }
+            "ports" => {
+                let fleet_svc = row.get(5).map(|s| s.as_str()).unwrap_or("");
+                if !fleet_svc.is_empty() && fleet_svc != "-" {
+                    badge(
+                        ui,
+                        &format!("★ Fleet: {fleet_svc}"),
+                        Color32::from_rgb(251, 191, 36),
+                        Color32::from_rgb(46, 34, 12),
+                    );
+                }
+            }
+            _ => {}
+        }
+    }
+
+    fn render_card_gauge(ui: &mut egui::Ui, dataset_slug: &str, row: &[String]) {
+        if dataset_slug == "disks" {
+            if let Some(pct) = row.get(1).and_then(|s| s.parse::<f32>().ok()) {
+                let frac = (pct / 100.0).clamp(0.0, 1.0);
+                let fill = if pct >= 95.0 {
+                    Color32::from_rgb(239, 68, 68)
+                } else if pct >= 85.0 {
+                    Color32::from_rgb(245, 158, 11)
+                } else {
+                    Color32::from_rgb(16, 185, 129)
+                };
+                let free_gb = row.get(2).map(|s| s.as_str()).unwrap_or("?");
+                let total_gb = row.get(3).map(|s| s.as_str()).unwrap_or("?");
+                ui.add(egui::ProgressBar::new(frac).fill(fill).text(format!(
+                    "{pct:.1}% used ({free_gb} GB free of {total_gb} GB)"
+                )));
+            }
+        } else if dataset_slug == "processes" || dataset_slug == "weeder" {
+            if let Some(mem_mb) = row.get(2).and_then(|s| s.parse::<f32>().ok()) {
+                let frac = (mem_mb / 4096.0).clamp(0.02, 1.0);
+                ui.add(
+                    egui::ProgressBar::new(frac)
+                        .fill(Color32::from_rgb(14, 165, 233))
+                        .text(format!("{mem_mb:.1} MB working set")),
+                );
+            }
+        }
+    }
+
+    fn render_row_quick_actions(
+        ui: &mut egui::Ui,
+        dataset_slug: &str,
+        row: &[String],
+        pending: &mut Option<PendingAction>,
+    ) {
+        match dataset_slug {
+            "disks" => {
+                if let Some(mount) = row.first() {
+                    if ui.small_button("📂 Browse").clicked() {
+                        *pending = Some(PendingAction::BrowseMount(mount.clone()));
+                    }
+                    if ui.small_button("🔍 Large Files").clicked() {
+                        *pending = Some(PendingAction::LargeFilesMount(mount.clone()));
+                    }
+                    if ui.small_button("🧬 Duplicates").clicked() {
+                        *pending = Some(PendingAction::DupsMount(mount.clone()));
+                    }
+                }
+            }
+            "processes" | "weeder" => {
+                let pid_str = row.first().cloned().unwrap_or_default();
+                let prot = row.get(5).map(|s| s.as_str()).unwrap_or("false") == "true";
+                if ui.small_button("🔎 Filter PID").clicked() {
+                    *pending = Some(PendingAction::FilterProcessPid(pid_str.clone()));
+                }
+                if !prot {
+                    if let Ok(pid) = pid_str.parse::<u32>() {
+                        if ui.small_button("🧹 Reap PID").clicked() {
+                            *pending = Some(PendingAction::ReapPid(pid));
+                        }
+                    }
+                }
+            }
+            "ports" => {
+                if let Some(pid_str) = row.get(4) {
+                    if ui.small_button("🔎 Filter Owning PID").clicked() {
+                        *pending = Some(PendingAction::FilterProcessPid(pid_str.clone()));
+                    }
+                }
+            }
+            "fileops" => {
+                // Path is column 0 in items/files/matches
+                if let Some(p) = row.first() {
+                    if p.contains('\\') || p.contains('/') {
+                        if ui.small_button("🔒 Who Locks This?").clicked() {
+                            *pending = Some(PendingAction::InspectLockPath(p.clone()));
+                        }
+                        if ui.small_button("#️⃣ SHA-256").clicked() {
+                            *pending = Some(PendingAction::HashFilePath(p.clone()));
+                        }
+                    }
+                }
+            }
+            "services" => {
+                if let Some(svc_name) = row.first() {
+                    if ui.small_button("🔄 Restart (sc.exe)").clicked() {
+                        *pending = Some(PendingAction::ServiceControl {
+                            name: svc_name.clone(),
+                            action: "restart".to_string(),
+                        });
+                    }
+                    if ui.small_button("▶ Start").clicked() {
+                        *pending = Some(PendingAction::ServiceControl {
+                            name: svc_name.clone(),
+                            action: "start".to_string(),
+                        });
+                    }
+                    if ui.small_button("⏹ Stop").clicked() {
+                        *pending = Some(PendingAction::ServiceControl {
+                            name: svc_name.clone(),
+                            action: "stop".to_string(),
+                        });
+                    }
+                }
+            }
+            _ => {}
+        }
     }
 }
 
 impl eframe::App for WinCraftApp {
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
-        ui.horizontal(|ui| {
-            ui.heading("WinCraft v0.1.0");
+        if !self.theme_applied {
+            apply_craft_theme(ui.ctx());
+            self.theme_applied = true;
+        }
+
+        // Top Header Bar
+        ui.horizontal_wrapped(|ui| {
+            ui.heading(
+                RichText::new("⚡ WinCraft v0.1.0")
+                    .color(Color32::from_rgb(103, 232, 249))
+                    .strong(),
+            );
             ui.separator();
             ui.checkbox(&mut self.opts.read_only, "Read-Only Guard");
+            ui.checkbox(&mut self.arm_confirm, "Arm Confirm Gate");
             ui.separator();
-            if ui.button("Refresh Status").clicked() {
+            if ui.button("🔄 Refresh Telemetry").clicked() {
                 self.status_json = self.exec(&Command::Status).ok();
+                self.weeder_json = self.exec(&Command::WeederScan).ok();
+            }
+            if ui.button("📖 PDF Brochure").clicked() {
+                let p = self.brochure_dir.join("wincraft-brochure.pdf");
+                self.open_external_file(&p);
+            }
+            if ui.button("📚 EPUB Brochure").clicked() {
+                let p = self.brochure_dir.join("wincraft-brochure.epub");
+                self.open_external_file(&p);
             }
             if ui
                 .button(if self.show_help_modal {
-                    "Hide Safety & Help"
+                    "✕ Hide Safety"
                 } else {
-                    "? Help & Safety"
+                    "? Safety & Architecture"
                 })
                 .clicked()
             {
                 self.show_help_modal = !self.show_help_modal;
             }
             ui.separator();
-            ui.label(&self.last_message);
+            ui.label(
+                RichText::new(&self.last_message)
+                    .color(Color32::from_rgb(167, 243, 208))
+                    .monospace(),
+            );
         });
 
+        ui.add_space(3.0);
+        self.render_kpi_ribbon(ui);
         ui.separator();
 
+        // Navigation Bar
         ui.horizontal_wrapped(|ui| {
             for p in [
                 Page::Dashboard,
@@ -428,9 +929,9 @@ impl eframe::App for WinCraftApp {
         if self.show_help_modal {
             ui.separator();
             ui.group(|ui| {
-                ui.heading("WinCraft Safety & Architecture");
+                ui.heading("WinCraft Safety Invariants & ArtCraft 3-Tier Architecture");
                 ui.label("WinCraft subsumes windows-operations-mcp, system-admin-mcp, sysinternals-mcp, filesystem-mcp, and winrar-mcp into one pure-Rust ArtCraft 3-tier binary.");
-                ui.label("1. Outputs default to Cards and can be switched at any time between Cards, List/Table, and JSON, with live filtering, column sorting, pagination, and CSV/MD/TXT/JSON export.");
+                ui.label("1. Default View is Cards, switchable at any time to List/Table or JSON, with live filtering, numeric-aware sorting, pagination, and CSV/MD/TXT/JSON export.");
                 ui.label("2. Protected system processes (csrss, lsass, svchost, explorer, nssm, pwsh, etc.) can never be reaped.");
                 ui.label("3. Every file edit creates a timestamped .bak backup; every HKCU registry edit exports a .reg snapshot first.");
                 ui.label("4. NSSM services are controlled strictly via sc.exe stop/start.");
@@ -441,7 +942,7 @@ impl eframe::App for WinCraftApp {
 
         egui::ScrollArea::vertical().show(ui, |ui| match self.page {
             Page::Dashboard => {
-                ui.heading("Host Overview & Logical Disk Volumes");
+                ui.heading("Host Overview & Logical Disk Volumes (Click a Card Action to Inspect in FileOps)");
                 if let Some(st) = self.status_json.clone() {
                     if let Some(disks) = st.get("disks") {
                         let wrapped = json!({ "volumes": disks });
@@ -456,18 +957,19 @@ impl eframe::App for WinCraftApp {
                 ui.horizontal(|ui| {
                     ui.label("Process query:");
                     ui.text_edit_singleline(&mut self.proc_filter);
-                    if ui.button("Scan Processes").clicked() {
+                    if ui.button("⚡ Scan Processes").clicked() {
                         let filter = if self.proc_filter.trim().is_empty() {
                             None
                         } else {
                             Some(self.proc_filter.trim().to_string())
                         };
-                        self.procs_json = self.exec(&Command::ProcList { filter, limit: 200 }).ok();
+                        self.procs_json =
+                            self.exec(&Command::ProcList { filter, limit: 250 }).ok();
                     }
                     ui.separator();
                     ui.label("Port:");
                     ui.text_edit_singleline(&mut self.port_filter);
-                    if ui.button("Scan Listening Ports").clicked() {
+                    if ui.button("🔌 Scan Listening Ports").clicked() {
                         let port = self.port_filter.trim().parse::<u16>().ok();
                         self.ports_json = self
                             .exec(&Command::PortMap {
@@ -479,20 +981,23 @@ impl eframe::App for WinCraftApp {
                 });
                 if let Some(ports) = self.ports_json.clone() {
                     ui.separator();
-                    ui.label("Listening Ports:");
+                    ui.label(RichText::new("Listening TCP/UDP Ports:").strong());
                     self.render_dataset_controls_and_body(ui, "ports", &ports);
                 }
                 if let Some(procs) = self.procs_json.clone() {
                     ui.separator();
-                    ui.label("Processes:");
+                    ui.label(RichText::new("Running Processes:").strong());
                     self.render_dataset_controls_and_body(ui, "processes", &procs);
                 }
             }
             Page::RamWeeder => {
                 ui.heading("RAM Weeder — Orphan Cargo Test & Zombie Engine Detector");
-                if ui.button("Run Weeder Scan").clicked() {
-                    self.weeder_json = self.exec(&Command::WeederScan).ok();
-                }
+                ui.horizontal(|ui| {
+                    if ui.button("🧹 Run Weeder Scan").clicked() {
+                        self.weeder_json = self.exec(&Command::WeederScan).ok();
+                    }
+                    ui.label("Tip: Enable 'Arm Confirm Gate' in the top bar before clicking 'Reap PID' on an orphan process card.");
+                });
                 if let Some(w) = self.weeder_json.clone() {
                     self.render_dataset_controls_and_body(ui, "weeder", &w);
                 }
@@ -503,9 +1008,9 @@ impl eframe::App for WinCraftApp {
                     ui.label("Directory:");
                     ui.text_edit_singleline(&mut self.target_path);
                 });
-                ui.horizontal(|ui| {
+                ui.horizontal_wrapped(|ui| {
                     let p = PathBuf::from(self.target_path.trim());
-                    if ui.button("List Directory").clicked() {
+                    if ui.button("📂 List Directory").clicked() {
                         self.fileops_json = self
                             .exec(&Command::FsList {
                                 path: p.clone(),
@@ -514,7 +1019,7 @@ impl eframe::App for WinCraftApp {
                             })
                             .ok();
                     }
-                    if ui.button("Disk Usage (DU)").clicked() {
+                    if ui.button("📊 Disk Usage (DU)").clicked() {
                         self.fileops_json = self
                             .exec(&Command::FsDu {
                                 path: p.clone(),
@@ -522,7 +1027,7 @@ impl eframe::App for WinCraftApp {
                             })
                             .ok();
                     }
-                    if ui.button("Find Duplicates (3-Stage SHA-256)").clicked() {
+                    if ui.button("🧬 Find Duplicates (3-Stage SHA-256)").clicked() {
                         self.fileops_json = self
                             .exec(&Command::FsDups {
                                 path: p.clone(),
@@ -530,7 +1035,7 @@ impl eframe::App for WinCraftApp {
                             })
                             .ok();
                     }
-                    if ui.button("Find Largest Files").clicked() {
+                    if ui.button("🐘 Find Largest Files").clicked() {
                         self.fileops_json = self
                             .exec(&Command::FsLarge {
                                 path: p.clone(),
@@ -542,7 +1047,7 @@ impl eframe::App for WinCraftApp {
                     }
                     ui.label("Grep:");
                     ui.text_edit_singleline(&mut self.grep_query);
-                    if ui.button("Search").clicked() {
+                    if ui.button("🔍 Search Text").clicked() {
                         let q = self.grep_query.clone();
                         self.fileops_json = self
                             .exec(&Command::FsGrep {
@@ -563,7 +1068,7 @@ impl eframe::App for WinCraftApp {
                 ui.horizontal(|ui| {
                     ui.label("File or Directory Path:");
                     ui.text_edit_singleline(&mut self.lock_path);
-                    if ui.button("Inspect Locks").clicked() {
+                    if ui.button("🔒 Inspect Locks").clicked() {
                         let p = PathBuf::from(self.lock_path.trim());
                         self.lock_json = self.exec(&Command::LockInspect { path: p }).ok();
                     }
@@ -577,7 +1082,7 @@ impl eframe::App for WinCraftApp {
                 ui.horizontal(|ui| {
                     ui.label("Service query:");
                     ui.text_edit_singleline(&mut self.svc_filter);
-                    if ui.button("Query Services").clicked() {
+                    if ui.button("⚙ Query Services").clicked() {
                         let filter = if self.svc_filter.trim().is_empty() {
                             None
                         } else {
@@ -599,10 +1104,10 @@ impl eframe::App for WinCraftApp {
             Page::StartupAndRegistry => {
                 ui.heading("Autoruns, Scheduled Tasks, Registry & Event Logs");
                 ui.horizontal(|ui| {
-                    if ui.button("List Startup Autoruns").clicked() {
+                    if ui.button("🚀 List Startup Autoruns").clicked() {
                         self.startup_json = self.exec(&Command::StartupList).ok();
                     }
-                    if ui.button("Tail System Event Log").clicked() {
+                    if ui.button("📜 Tail System Event Log").clicked() {
                         self.events_json = self
                             .exec(&Command::EventTail {
                                 channel: "System".to_string(),
@@ -614,7 +1119,7 @@ impl eframe::App for WinCraftApp {
                 ui.horizontal(|ui| {
                     ui.label("Registry Key:");
                     ui.text_edit_singleline(&mut self.reg_key);
-                    if ui.button("Read Key").clicked() {
+                    if ui.button("🔑 Read Key").clicked() {
                         let k = self.reg_key.trim().to_string();
                         self.reg_json = self
                             .exec(&Command::RegRead {
@@ -635,10 +1140,24 @@ impl eframe::App for WinCraftApp {
                 }
             }
             Page::DoctorAndHelp => {
-                ui.heading("Toolchain Doctor & 26 MCP Tools Catalog");
-                if ui.button("Re-run Doctor").clicked() {
-                    self.doctor_json = self.exec(&Command::Doctor).ok();
-                }
+                ui.heading("Toolchain Doctor, Brochure Assets & 26 MCP Tools Catalog");
+                ui.horizontal_wrapped(|ui| {
+                    if ui.button("🩺 Re-run Doctor").clicked() {
+                        self.doctor_json = self.exec(&Command::Doctor).ok();
+                    }
+                    if ui.button("📖 Open PDF Brochure").clicked() {
+                        let p = self.brochure_dir.join("wincraft-brochure.pdf");
+                        self.open_external_file(&p);
+                    }
+                    if ui.button("📚 Open EPUB Brochure").clicked() {
+                        let p = self.brochure_dir.join("wincraft-brochure.epub");
+                        self.open_external_file(&p);
+                    }
+                    if ui.button("🌐 Open HTML Brochure").clicked() {
+                        let p = self.brochure_dir.join("wincraft-brochure.html");
+                        self.open_external_file(&p);
+                    }
+                });
                 let tools_val = json!({ "tools": tools_catalog() });
                 self.render_dataset_controls_and_body(ui, "tools", &tools_val);
             }
@@ -665,7 +1184,7 @@ fn main() {
     let native_options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
             .with_title("WinCraft — Windows Host, RAM Weeder, FileOps & SysAdmin Studio")
-            .with_inner_size([1240.0, 800.0]),
+            .with_inner_size([1280.0, 820.0]),
         ..Default::default()
     };
     let _ = eframe::run_native(

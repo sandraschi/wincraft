@@ -4,6 +4,13 @@ Pure-Rust Windows host, RAM Weeder, Restart Manager file-lock inspector, high-sp
 
 Subsumes `windows-operations-mcp`, `system-admin-mcp` (RAM Weeder), `sysinternals-mcp`, `filesystem-mcp`, `winrar-mcp`, and the retired Python `filecraft` scaffold into one zero-tax ArtCraft 3-tier workspace (`wincraft-core`, `wincraft-mcp`, `wincraft-app`).
 
+## Technical Brochure & Operator Handbook (`docs/brochure/`)
+
+WinCraft ships a BookCraft-compiled brochure suite in [`docs/brochure/`](docs/brochure/) following `mcp-central-docs/standards/CRAFT_BROCHURE_STANDARD.md`:
+- [`docs/brochure/wincraft-brochure.pdf`](docs/brochure/wincraft-brochure.pdf) — Print-ready A4 PDF brochure with vector architecture SVG, subsystem cards, and full 26-tool matrix.
+- [`docs/brochure/wincraft-brochure.epub`](docs/brochure/wincraft-brochure.epub) — Reflowable EPUB e-book edition compiled via `bookcraft-cli convert --to epub`.
+- [`docs/brochure/wincraft-brochure.html`](docs/brochure/wincraft-brochure.html) — Canonical HTML5 + inline SVG source (also launchable from the `📖 PDF Brochure` / `📚 EPUB Brochure` buttons in `wincraft-app`).
+
 ## Quick Start
 
 ```powershell

@@ -1,0 +1,431 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>WinCraft v0.1.0 — Technical Brochure &amp; Operator Handbook</title>
+  <meta name="author" content="Sandra Schipal" />
+  <meta name="description" content="Pure-Rust ArtCraft 3-Tier Windows Host, RAM Weeder, Restart Manager Lock Inspector, High-Speed FileOps, and NSSM-Safe SysAdmin Studio." />
+  <style>
+    @page {
+      size: A4;
+      margin: 18mm 16mm 18mm 16mm;
+    }
+    * {
+      box-sizing: border-box;
+    }
+    body {
+      font-family: "Segoe UI", -apple-system, BlinkMacSystemFont, Roboto, Helvetica, Arial, sans-serif;
+      color: #0f172a;
+      background: #ffffff;
+      line-height: 1.55;
+      font-size: 10.5pt;
+      margin: 0;
+      padding: 0;
+    }
+    .cover {
+      background: linear-gradient(145deg, #090d16 0%, #0f172a 55%, #0c4a6e 100%);
+      color: #f8fafc;
+      padding: 44px 40px 48px 40px;
+      border-radius: 14px;
+      margin-bottom: 28px;
+      page-break-after: always;
+    }
+    .cover-kicker {
+      display: inline-block;
+      background: rgba(56, 189, 248, 0.18);
+      border: 1px solid #38bdf8;
+      color: #7dd3fc;
+      font-size: 9pt;
+      font-weight: 700;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      padding: 4px 12px;
+      border-radius: 999px;
+      margin-bottom: 18px;
+    }
+    .cover h1 {
+      font-size: 32pt;
+      line-height: 1.1;
+      margin: 0 0 12px 0;
+      color: #ffffff;
+      letter-spacing: -0.02em;
+    }
+    .cover h2 {
+      font-size: 14pt;
+      font-weight: 400;
+      color: #bae6fd;
+      margin: 0 0 28px 0;
+    }
+    .cover-grid {
+      display: table;
+      width: 100%;
+      margin-top: 24px;
+      border-collapse: separate;
+      border-spacing: 10px;
+    }
+    .cover-stat {
+      display: table-cell;
+      width: 25%;
+      background: rgba(15, 23, 42, 0.72);
+      border: 1px solid rgba(125, 211, 252, 0.35);
+      border-radius: 10px;
+      padding: 14px;
+      text-align: center;
+    }
+    .cover-stat .num {
+      font-size: 20pt;
+      font-weight: 800;
+      color: #38bdf8;
+      display: block;
+    }
+    .cover-stat .lbl {
+      font-size: 8.5pt;
+      color: #cbd5e1;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+    }
+    .cover-footer {
+      margin-top: 32px;
+      padding-top: 16px;
+      border-top: 1px solid rgba(148, 163, 184, 0.3);
+      font-size: 9pt;
+      color: #94a3b8;
+    }
+    h2.section-title {
+      font-size: 16pt;
+      color: #0c4a6e;
+      border-bottom: 2px solid #0284c7;
+      padding-bottom: 6px;
+      margin-top: 26px;
+      margin-bottom: 12px;
+    }
+    h3 {
+      font-size: 12pt;
+      color: #0f172a;
+      margin-top: 18px;
+      margin-bottom: 6px;
+    }
+    p {
+      margin: 0 0 10px 0;
+    }
+    .callout {
+      background: #f0f9ff;
+      border-left: 4px solid #0284c7;
+      padding: 12px 16px;
+      border-radius: 0 8px 8px 0;
+      margin: 14px 0;
+    }
+    .callout-warn {
+      background: #fffbeb;
+      border-left: 4px solid #d97706;
+      padding: 12px 16px;
+      border-radius: 0 8px 8px 0;
+      margin: 14px 0;
+    }
+    .cards-2col {
+      width: 100%;
+      border-collapse: separate;
+      border-spacing: 12px;
+      margin: 10px 0;
+    }
+    .card {
+      background: #f8fafc;
+      border: 1px solid #cbd5e1;
+      border-radius: 10px;
+      padding: 14px 16px;
+      vertical-align: top;
+    }
+    .card h4 {
+      margin: 0 0 6px 0;
+      color: #0369a1;
+      font-size: 11pt;
+    }
+    table.data-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 12px 0 20px 0;
+      font-size: 9.2pt;
+    }
+    table.data-table th {
+      background: #0f172a;
+      color: #f8fafc;
+      text-align: left;
+      padding: 7px 9px;
+      font-weight: 700;
+    }
+    table.data-table td {
+      padding: 6px 9px;
+      border-bottom: 1px solid #e2e8f0;
+      vertical-align: top;
+    }
+    table.data-table tr:nth-child(even) td {
+      background: #f8fafc;
+    }
+    code, pre {
+      font-family: "Cascadia Code", "Consolas", "Courier New", monospace;
+      font-size: 9pt;
+    }
+    code {
+      background: #e2e8f0;
+      color: #0f172a;
+      padding: 1px 5px;
+      border-radius: 4px;
+    }
+    pre {
+      background: #0f172a;
+      color: #e2e8f0;
+      padding: 12px 14px;
+      border-radius: 8px;
+      overflow-x: auto;
+      line-height: 1.45;
+    }
+    .pill-ro {
+      background: #dcfce7;
+      color: #166534;
+      padding: 2px 7px;
+      border-radius: 999px;
+      font-weight: 700;
+      font-size: 8pt;
+    }
+    .pill-mut {
+      background: #fef3c7;
+      color: #92400e;
+      padding: 2px 7px;
+      border-radius: 999px;
+      font-weight: 700;
+      font-size: 8pt;
+    }
+    .page-break {
+      page-break-before: always;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- COVER PAGE -->
+  <div class="cover">
+    <div class="cover-kicker">ArtCraft Fleet Technical Brochure · Series #1</div>
+    <h1>WinCraft v0.1.0</h1>
+    <h2>Pure-Rust Windows Host, RAM Weeder, Restart Manager File-Lock Inspector, High-Speed FileOps &amp; NSSM-Safe SysAdmin Studio</h2>
+
+    <svg viewBox="0 0 760 170" width="100%" height="170" xmlns="http://www.w3.org/2000/svg" style="margin: 10px 0 18px 0;">
+      <rect x="2" y="2" width="756" height="166" rx="12" fill="#0b1322" stroke="#38bdf8" stroke-width="1.5"/>
+      <!-- L3 Box -->
+      <rect x="24" y="24" width="200" height="122" rx="8" fill="#1e293b" stroke="#67e8f9" stroke-width="1.5"/>
+      <text x="124" y="52" fill="#67e8f9" font-size="13" font-weight="bold" text-anchor="middle">L3: wincraft-app</text>
+      <text x="124" y="74" fill="#e2e8f0" font-size="10" text-anchor="middle">Native eframe/egui Studio</text>
+      <text x="124" y="94" fill="#94a3b8" font-size="9.5" text-anchor="middle">Cards (Default) | List | JSON</text>
+      <text x="124" y="112" fill="#94a3b8" font-size="9.5" text-anchor="middle">Sort · Filter · Paginate</text>
+      <text x="124" y="130" fill="#34d399" font-size="9.5" text-anchor="middle">CSV / MD / TXT / JSON Export</text>
+
+      <!-- L2 Box -->
+      <rect x="280" y="24" width="200" height="122" rx="8" fill="#1e293b" stroke="#38bdf8" stroke-width="1.5"/>
+      <text x="380" y="52" fill="#38bdf8" font-size="13" font-weight="bold" text-anchor="middle">L2: wincraft-mcp</text>
+      <text x="380" y="74" fill="#e2e8f0" font-size="10" text-anchor="middle">Unified CLI + Stdio MCP</text>
+      <text x="380" y="94" fill="#94a3b8" font-size="9.5" text-anchor="middle">26 Tools (win_* / win.*)</text>
+      <text x="380" y="112" fill="#94a3b8" font-size="9.5" text-anchor="middle">--format cards|list|json|csv|md</text>
+      <text x="380" y="130" fill="#34d399" font-size="9.5" text-anchor="middle">Zero Port / Zero Venv Tax</text>
+
+      <!-- L1 Box -->
+      <rect x="536" y="24" width="200" height="122" rx="8" fill="#0f172a" stroke="#10b981" stroke-width="2"/>
+      <text x="636" y="52" fill="#34d399" font-size="13" font-weight="bold" text-anchor="middle">L1: wincraft-core</text>
+      <text x="636" y="74" fill="#e2e8f0" font-size="10" text-anchor="middle">Deterministic dispatch()</text>
+      <text x="636" y="94" fill="#fcd34d" font-size="9.5" text-anchor="middle">Win32 rstrtmgr.dll &amp; kernel32</text>
+      <text x="636" y="112" fill="#94a3b8" font-size="9.5" text-anchor="middle">3-Stage SHA-256 Dups + Weeder</text>
+      <text x="636" y="130" fill="#94a3b8" font-size="9.5" text-anchor="middle">.bak &amp; .reg Safety Guards</text>
+
+      <!-- Connectors -->
+      <line x1="224" y1="85" x2="280" y2="85" stroke="#38bdf8" stroke-width="2"/>
+      <line x1="480" y1="85" x2="536" y2="85" stroke="#10b981" stroke-width="2"/>
+    </svg>
+
+    <div class="cover-grid">
+      <div class="cover-stat">
+        <span class="num">26</span>
+        <span class="lbl">MCP Tools &amp; Verbs</span>
+      </div>
+      <div class="cover-stat">
+        <span class="num">5 &rarr; 1</span>
+        <span class="lbl">Repos Consolidated</span>
+      </div>
+      <div class="cover-stat">
+        <span class="num">0 MB</span>
+        <span class="lbl">Idle Daemon Tax</span>
+      </div>
+      <div class="cover-stat">
+        <span class="num">6 Formats</span>
+        <span class="lbl">Cards/List/JSON/CSV/MD/TXT</span>
+      </div>
+    </div>
+
+    <div class="cover-footer">
+      <strong>Repository:</strong> <code>D:\Dev\repos\wincraft</code> (<code>https://github.com/sandraschi/wincraft</code>) &middot;
+      <strong>Architecture:</strong> Storytold ArtCraft 3-Tier Standard &middot;
+      <strong>Compiled via:</strong> <code>BookCraft v0.5.0</code>
+    </div>
+  </div>
+
+  <!-- SECTION 1: EXECUTIVE SUMMARY & CONSOLIDATION -->
+  <h2 class="section-title">1. Executive Summary &amp; Fleet Consolidation</h2>
+  <p>
+    Prior to <strong>WinCraft</strong>, Windows host inspection, file-lock debugging, duplicate file reclamation, and service administration were split across five separate Python MCP servers plus a prototype Python scaffold. Running multiple Python virtual environments and background webservers merely to inspect processes or check which process locked a file consumed hundreds of megabytes of RAM.
+  </p>
+
+  <div class="callout">
+    <strong>One Native Binary, Three Surfaces:</strong> WinCraft compiles to a single pure-Rust workspace (<code>wincraft-core</code>, <code>wincraft-mcp</code>, <code>wincraft-app</code>) with zero runtime dependencies, zero network port claims, and strict compile-time denial of <code>unwrap</code>, <code>expect</code>, <code>panic</code>, <code>todo</code>, and <code>unimplemented</code>.
+  </div>
+
+  <table class="data-table">
+    <thead>
+      <tr>
+        <th>Legacy Python Repo / Scaffold</th>
+        <th>WinCraft Subsystem Replacement</th>
+        <th>Architectural Upgrade</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><code>windows-operations-mcp</code></td>
+        <td><code>sysadmin</code> + <code>proc_ports</code></td>
+        <td>Native NSSM-aware <code>sc.exe</code> controller, <code>HKCU</code> <code>.reg</code> auto-backups, Startup autorun &amp; Event Log tailing.</td>
+      </tr>
+      <tr>
+        <td><code>system-admin-mcp</code></td>
+        <td><code>proc_ports::weeder_scan</code> / <code>weeder_reap</code></td>
+        <td>Instant RAM Weeder detecting orphaned <code>&lt;crate&gt;-&lt;16hex&gt;.exe</code> cargo test binaries and zombie workers with a hard-coded protected system allowlist.</td>
+      </tr>
+      <tr>
+        <td><code>sysinternals-mcp</code></td>
+        <td><code>locks</code> (Win32 <code>rstrtmgr.dll</code> FFI)</td>
+        <td>Direct Win32 Restart Manager FFI (<code>RmStartSession</code> / <code>RmGetList</code>) answers <em>"Who locks this file?"</em> in microseconds without kernel drivers.</td>
+      </tr>
+      <tr>
+        <td><code>filesystem-mcp</code> &amp; <code>filecraft</code></td>
+        <td><code>fileops</code> + <code>hash</code></td>
+        <td>3-stage streaming SHA-256 duplicate finder (Size &rarr; 4 KB Prefix &rarr;Full FIPS 180-4 SHA-256), disk usage breakdown, and <code>.bak</code> write/undo.</td>
+      </tr>
+      <tr>
+        <td><code>winrar-mcp</code></td>
+        <td><code>fileops::fs_archive_*</code></td>
+        <td>Pure-Rust deflated <code>.zip</code> creation &amp; inspection with automatic <code>Rar.exe</code> / <code>7z.exe</code> toolchain probing in <code>win_doctor</code>.</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <!-- SECTION 2: CORE SUBSYSTEMS -->
+  <h2 class="section-title">2. Flagship Subsystems</h2>
+
+  <table class="cards-2col">
+    <tr>
+      <td class="card" width="50%">
+        <h4>🔒 Native Win32 Restart Manager Lock Inspector</h4>
+        <p>
+          When Windows refuses to delete or overwrite a file or directory, <code>win_lock_inspect</code> links directly against <code>rstrtmgr.dll</code> (<code>RmStartSession</code>, <code>RmRegisterResources</code>, <code>RmGetList</code>) to report the exact locking PID, application name, and service short name—with zero EULA prompts or kernel drivers.
+        </p>
+      </td>
+      <td class="card" width="50%">
+        <h4>🧬 3-Stage Streaming Duplicate Detector</h4>
+        <p>
+          <code>win_fs_dups</code> scans directory trees at native speed by (1) grouping files by exact byte size, (2) hashing only the first 4 KB of size-colliding files, and (3) streaming 64 KB chunks through a zero-dependency FIPS 180-4 SHA-256 engine only for prefix matches.
+        </p>
+      </td>
+    </tr>
+    <tr>
+      <td class="card" width="50%">
+        <h4>🧹 RAM Weeder &amp; Protected Process Guard</h4>
+        <p>
+          <code>win_weeder_scan</code> identifies forgotten Rust test executables, orphaned headless browsers, and runaway workers. <code>win_weeder_reap</code> requires <code>confirm=true</code> and enforces an immutable allowlist protecting <code>csrss.exe</code>, <code>lsass.exe</code>, <code>svchost.exe</code>, <code>explorer.exe</code>, <code>nssm.exe</code>, <code>pwsh.exe</code>, and IDE hosts.
+        </p>
+      </td>
+      <td class="card" width="50%">
+        <h4>🔌 Fleet-Correlated Port Mapper</h4>
+        <p>
+          <code>win_port_map</code> maps listening TCP/UDP sockets to owning PIDs and automatically cross-references <code>mcp-central-docs/operations/WEBAPP_PORTS.md</code> so fleet services are badged by name in both the CLI and L3 desktop app.
+        </p>
+      </td>
+    </tr>
+  </table>
+
+  <!-- SECTION 3: INTERACTIVE VIEWS & EXPORT ENGINE -->
+  <h2 class="section-title">3. Universal Cards / List / JSON Engine &amp; Multi-Format Export</h2>
+  <p>
+    Every dataset in WinCraft (<code>processes</code>, <code>services</code>, <code>ports</code>, <code>disks</code>, <code>weeder</code> candidates, <code>fileops</code> items/duplicates/grep matches, <code>locks</code>, <code>startup</code>, <code>tasks</code>, <code>registry</code>, and <code>tools</code>) flows through <code>wincraft_core::export</code>:
+  </p>
+  <ul>
+    <li><strong>Switchable Views (Default: Cards):</strong> Toggle instantaneously between <strong>🗂 Cards (Default)</strong> (with visual capacity/memory bars and one-click action buttons), <strong>☰ List / Table</strong>, and <strong><code>{ } JSON</code></strong>.</li>
+    <li><strong>Live Substring Filtering &amp; Numeric-Aware Sorting:</strong> Filter across all columns in real time and sort any column ascending or descending with automatic numeric detection (PID, MB, GB, %, Port).</li>
+    <li><strong>Full Pagination:</strong> Choose <code>10</code>, <code>25</code>, <code>50</code>, or <code>100</code> items per page with <code>First</code>, <code>Prev</code>, <code>Page X / Y</code>, <code>Next</code>, and <code>Last</code> navigation.</li>
+    <li><strong>One-Click &amp; CLI Export:</strong> Export any filtered, sorted view to <strong><code>CSV</code></strong>, <strong><code>MD</code> (Markdown Table)</strong>, <strong><code>TXT</code></strong>, or <strong><code>JSON</code></strong>.</li>
+  </ul>
+
+  <pre># Default Cards view (paginated, 5 items per page)
+wincraft proc-list --page-size 5
+
+# List/Table view sorted by Display Name (col 1)
+wincraft svc-list --format list --sort-col 1 --page-size 15
+
+# Markdown table output + simultaneous CSV export
+wincraft disk-list --format md --export D:\Dev\repos\wincraft\exports\disks.csv</pre>
+
+  <!-- SECTION 4: COMPLETE 26-TOOL MATRIX -->
+  <div class="page-break"></div>
+  <h2 class="section-title">4. Complete 26-Tool Reference Matrix</h2>
+  <p>All 26 tools are exposed over stdio MCP (accepting both <code>win_*</code> and dotted <code>win.*</code> names) and as CLI subcommands.</p>
+
+  <table class="data-table">
+    <thead>
+      <tr>
+        <th>MCP Tool</th>
+        <th>CLI Verb</th>
+        <th>Domain</th>
+        <th>Mode</th>
+        <th>Confirm</th>
+        <th>Capability</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr><td><code>win_status</code></td><td><code>status</code></td><td>system</td><td><span class="pill-ro">Read-Only</span></td><td>No</td><td>Host overview: logical volumes, process count, RAM weeder summary, PATH health.</td></tr>
+      <tr><td><code>win_doctor</code></td><td><code>doctor</code></td><td>system</td><td><span class="pill-ro">Read-Only</span></td><td>No</td><td>Verify Restart Manager FFI, <code>sc.exe</code>, <code>reg.exe</code>, <code>wevtutil.exe</code>, <code>Rar.exe</code>, <code>7z.exe</code>, Sysinternals.</td></tr>
+      <tr><td><code>win_tools</code></td><td><code>tools</code></td><td>system</td><td><span class="pill-ro">Read-Only</span></td><td>No</td><td>List all 26 MCP tools and their safety metadata.</td></tr>
+      <tr><td><code>win_disk_list</code></td><td><code>disk-list</code></td><td>system</td><td><span class="pill-ro">Read-Only</span></td><td>No</td><td>Enumerate logical volumes (<code>A:..Z:</code>) via Win32 <code>GetDiskFreeSpaceExW</code>.</td></tr>
+      <tr><td><code>win_env_audit</code></td><td><code>env-audit</code></td><td>system</td><td><span class="pill-ro">Read-Only</span></td><td>No</td><td>Audit <code>PATH</code> for dead/missing directories and duplicate entries.</td></tr>
+      <tr><td><code>win_proc_list</code></td><td><code>proc-list</code></td><td>processes</td><td><span class="pill-ro">Read-Only</span></td><td>No</td><td>List running Windows processes sorted by working-set memory with protected status.</td></tr>
+      <tr><td><code>win_port_map</code></td><td><code>port-map</code></td><td>processes</td><td><span class="pill-ro">Read-Only</span></td><td>No</td><td>Map TCP/UDP ports to owning PIDs and correlate with <code>WEBAPP_PORTS.md</code>.</td></tr>
+      <tr><td><code>win_weeder_scan</code></td><td><code>weeder-scan</code></td><td>weeder</td><td><span class="pill-ro">Read-Only</span></td><td>No</td><td>Detect orphaned cargo test binaries, headless engines, and runaway workers.</td></tr>
+      <tr><td><code>win_weeder_reap</code></td><td><code>weeder-reap</code></td><td>weeder</td><td><span class="pill-mut">Mutating</span></td><td><strong>Yes</strong></td><td>Terminate a non-protected process by PID (requires <code>confirm=true</code>).</td></tr>
+      <tr><td><code>win_lock_inspect</code></td><td><code>lock-inspect</code></td><td>fileops</td><td><span class="pill-ro">Read-Only</span></td><td>No</td><td>Query Win32 Restart Manager (<code>rstrtmgr.dll</code>) for processes locking a file/folder.</td></tr>
+      <tr><td><code>win_fs_list</code></td><td><code>fs-list</code></td><td>fileops</td><td><span class="pill-ro">Read-Only</span></td><td>No</td><td>List directory entries with configurable recursion depth.</td></tr>
+      <tr><td><code>win_fs_du</code></td><td><code>fs-du</code></td><td>fileops</td><td><span class="pill-ro">Read-Only</span></td><td>No</td><td>Recursive directory disk usage breakdown and top file extensions.</td></tr>
+      <tr><td><code>win_fs_large</code></td><td><code>fs-large</code></td><td>fileops</td><td><span class="pill-ro">Read-Only</span></td><td>No</td><td>Find largest files exceeding a byte threshold.</td></tr>
+      <tr><td><code>win_fs_dups</code></td><td><code>fs-dups</code></td><td>fileops</td><td><span class="pill-ro">Read-Only</span></td><td>No</td><td>3-stage streaming SHA-256 duplicate file detector.</td></tr>
+      <tr><td><code>win_fs_hash</code></td><td><code>fs-hash</code></td><td>fileops</td><td><span class="pill-ro">Read-Only</span></td><td>No</td><td>Compute streaming FIPS 180-4 SHA-256 digest of a file.</td></tr>
+      <tr><td><code>win_fs_grep</code></td><td><code>fs-grep</code></td><td>fileops</td><td><span class="pill-ro">Read-Only</span></td><td>No</td><td>Search text files for a substring while skipping binaries and build dirs.</td></tr>
+      <tr><td><code>win_fs_backup_write</code></td><td><code>fs-backup-write</code></td><td>fileops</td><td><span class="pill-mut">Mutating</span></td><td><strong>Yes</strong></td><td>Write UTF-8 file after creating a mandatory timestamped <code>.bak</code> backup.</td></tr>
+      <tr><td><code>win_fs_undo_backup</code></td><td><code>fs-undo-backup</code></td><td>fileops</td><td><span class="pill-mut">Mutating</span></td><td><strong>Yes</strong></td><td>Restore the most recent <code>.bak</code> backup for a file.</td></tr>
+      <tr><td><code>win_fs_archive_inspect</code></td><td><code>fs-archive-inspect</code></td><td>fileops</td><td><span class="pill-ro">Read-Only</span></td><td>No</td><td>Inspect entries and compression ratios inside a <code>.zip</code> archive.</td></tr>
+      <tr><td><code>win_fs_archive_create</code></td><td><code>fs-archive-create</code></td><td>fileops</td><td><span class="pill-mut">Mutating</span></td><td><strong>Yes</strong></td><td>Create a deflated <code>.zip</code> archive from a file or directory.</td></tr>
+      <tr><td><code>win_svc_list</code></td><td><code>svc-list</code></td><td>sysadmin</td><td><span class="pill-ro">Read-Only</span></td><td>No</td><td>List Windows services with state, display name, and PID.</td></tr>
+      <tr><td><code>win_svc_control</code></td><td><code>svc-control</code></td><td>sysadmin</td><td><span class="pill-mut">Mutating</span></td><td><strong>Yes</strong></td><td>Start, stop, or restart a Windows service via <code>sc.exe</code> (NSSM-safe).</td></tr>
+      <tr><td><code>win_startup_list</code></td><td><code>startup-list</code></td><td>sysadmin</td><td><span class="pill-ro">Read-Only</span></td><td>No</td><td>List startup autorun entries across <code>HKCU</code>/<code>HKLM</code> Run keys and Startup folders.</td></tr>
+      <tr><td><code>win_task_list</code></td><td><code>task-list</code></td><td>sysadmin</td><td><span class="pill-ro">Read-Only</span></td><td>No</td><td>List Windows Scheduled Tasks via <code>schtasks</code>.</td></tr>
+      <tr><td><code>win_reg_read</code></td><td><code>reg-read</code></td><td>sysadmin</td><td><span class="pill-ro">Read-Only</span></td><td>No</td><td>Read values and subkeys from a Windows Registry key.</td></tr>
+      <tr><td><code>win_reg_write</code></td><td><code>reg-write</code></td><td>sysadmin</td><td><span class="pill-mut">Mutating</span></td><td><strong>Yes</strong></td><td>Write an <code>HKCU</code> Registry value with automatic <code>.reg</code> backup export.</td></tr>
+      <tr><td><code>win_event_tail</code></td><td><code>event-tail</code></td><td>sysadmin</td><td><span class="pill-ro">Read-Only</span></td><td>No</td><td>Tail recent Warning/Error/Critical events from Windows Event Logs.</td></tr>
+    </tbody>
+  </table>
+
+  <!-- SECTION 5: SAFETY INVARIANTS -->
+  <h2 class="section-title">5. Defense-in-Depth Safety Invariants</h2>
+  <div class="callout-warn">
+    <strong>Five Non-Bypassable Guards Enforced in <code>wincraft-core</code>:</strong>
+    <ol style="margin: 6px 0 0 0; padding-left: 20px;">
+      <li><strong>Explicit Confirmation Gate:</strong> Every mutating verb (<code>weeder_reap</code>, <code>fs_backup_write</code>, <code>fs_undo_backup</code>, <code>fs_archive_create</code>, <code>svc_control</code>, <code>reg_write</code>) refuses execution unless <code>confirm: true</code> is explicitly supplied.</li>
+      <li><strong>Global Read-Only Lock:</strong> Passing <code>--read-only</code>, setting <code>WINCRAFT_READ_ONLY=1</code>, or toggling the UI Read-Only Guard blocks all mutating commands across CLI, MCP, and GUI.</li>
+      <li><strong>Mandatory Pre-Write Backups:</strong> <code>fs_backup_write</code> creates a timestamped <code>.bak</code> sibling before modifying any existing file; <code>reg_write</code> exports a timestamped <code>.reg</code> snapshot to <code>%LOCALAPPDATA%\wincraft\backups\</code> before touching <code>HKCU</code>.</li>
+      <li><strong>Protected Process Allowlist:</strong> Critical Windows and developer host processes (<code>csrss.exe</code>, <code>lsass.exe</code>, <code>svchost.exe</code>, <code>explorer.exe</code>, <code>nssm.exe</code>, <code>pwsh.exe</code>, <code>code.exe</code>, <code>claude.exe</code>) can never be reaped.</li>
+      <li><strong>NSSM Service Discipline:</strong> <code>svc_control</code> inspects <code>sc.exe qc</code> for NSSM wrappers and strictly uses <code>sc.exe stop</code> / <code>sc.exe start</code> rather than killing child processes.</li>
+    </ol>
+  </div>
+
+</body>
+</html>
