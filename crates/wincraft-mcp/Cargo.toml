@@ -1,0 +1,22 @@
+[package]
+name = "wincraft-mcp"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "L2 CLI + stdio MCP server for WinCraft"
+
+[[bin]]
+name = "wincraft"
+path = "src/main.rs"
+
+[dependencies]
+wincraft-core = { path = "../wincraft-core" }
+serde = { workspace = true }
+serde_json = { workspace = true }
+clap = { workspace = true }
+
+[dev-dependencies]
+tempfile = { workspace = true }
+
+[lints]
+workspace = true

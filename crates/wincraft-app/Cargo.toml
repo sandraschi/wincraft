@@ -1,0 +1,22 @@
+[package]
+name = "wincraft-app"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "L3 native egui desktop workstation for WinCraft"
+
+[[bin]]
+name = "wincraft-app"
+path = "src/main.rs"
+
+[dependencies]
+wincraft-core = { path = "../wincraft-core" }
+serde = { workspace = true }
+serde_json = { workspace = true }
+eframe = { workspace = true }
+
+[dev-dependencies]
+tempfile = { workspace = true }
+
+[lints]
+workspace = true
