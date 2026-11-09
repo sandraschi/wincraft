@@ -10,3 +10,4 @@
 - **Fleet Port Mapper**: `win_port_map` correlates `netstat -ano` TCP/UDP PIDs against `mcp-central-docs/operations/WEBAPP_PORTS.md`.
 - **Write-Safety Guards**: `win_fs_backup_write` / `win_fs_undo_backup` (`.bak` snapshots), `win_reg_write` (`.reg` backup export + `HKCU` confinement), and `win_svc_control` (NSSM-aware `sc.exe stop/start`).
 - **8-Page Native Desktop Studio (`wincraft-app`)**: Host & Disks, Processes & Ports, RAM Weeder, FileOps, Lock Inspector, Services & NSSM, Startup & Registry, Doctor & Tools.
+- **Cards (Default) / List / JSON View Switcher + Pagination, Sorting, Filtering & Export**: All collection outputs in `wincraft-app` and `wincraft` CLI default to **Cards** view and switch cleanly between `Cards`, `List` (table), and `JSON`, with live substring filtering, numeric-aware column sorting, pagination (`10`/`25`/`50`/`100`), and export to `CSV`, `MD` (Markdown table), `TXT`, or `JSON`.

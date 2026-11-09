@@ -2,6 +2,19 @@
 
 Every tool is available over stdio MCP (`win_<name>` or `win.<name>`) and via the `wincraft` CLI (`wincraft <kebab-verb>`).
 
+## Global CLI Output, Pagination, Sort, Filter & Export Flags
+
+| Flag | Default | Description |
+|---|---|---|
+| `--format <FMT>` | `cards` | Output mode: `cards` (default), `list`, `json`, `csv`, `md`, `txt` |
+| `--json` | `false` | Shorthand for `--format json` |
+| `--query-filter <TEXT>` | `""` | Filter rows by case-insensitive substring across any column |
+| `--sort-col <INDEX>` | `0` | Sort by 0-based column index (numeric-aware) |
+| `--desc` | `false` | Sort descending instead of ascending |
+| `--page <N>` | `1` | 1-based page number |
+| `--page-size <N>` | `25` | Rows per page (`0` = all rows) |
+| `--export <PATH>` | None | Export full filtered/sorted dataset to `.csv`, `.md`, `.txt`, or `.json` |
+
 | Tool | CLI Verb | Domain | Read-Only | Confirm Gate | Description |
 |---|---|---|---|---|---|
 | `win_status` | `status` | `system` | Yes | No | Host overview: disks, process count, weeder count, dead PATH count. |

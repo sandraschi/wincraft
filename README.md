@@ -9,11 +9,24 @@ Subsumes `windows-operations-mcp`, `system-admin-mcp` (RAM Weeder), `sysinternal
 ```powershell
 cargo run -p wincraft-mcp --bin wincraft -- --smoke
 cargo run -p wincraft-mcp --bin wincraft -- status
+cargo run -p wincraft-mcp --bin wincraft -- proc-list --page-size 10
+cargo run -p wincraft-mcp --bin wincraft -- svc-list --format list --sort-col 1 --page-size 15
+cargo run -p wincraft-mcp --bin wincraft -- disk-list --format md --export exports\disks.csv
 cargo run -p wincraft-mcp --bin wincraft -- lock-inspect --path D:\Dev\repos\wincraft\Cargo.toml
 cargo run -p wincraft-mcp --bin wincraft -- weeder-scan
 cargo run -p wincraft-mcp --bin wincraft -- port-map
 cargo run -p wincraft-app
 ```
+
+## Output Modes, Pagination, Sorting, Filtering & Export
+
+Every collection output in both the L3 `wincraft-app` desktop UI and the L2 `wincraft` CLI (`processes`, `services`, `ports`, `disks`, `weeder` candidates, `fileops` entries/duplicates/grep matches, `locks`, `startup`, `tasks`, `registry`, and `tools`) supports:
+
+- **View Switcher (Default: `Cards`):** Switch between **🗂 Cards (Default)**, **☰ List / Table**, and **`{ } JSON`** (via UI toolbar or `--format <cards|list|json|csv|md|txt>` / `--json`).
+- **Live Filtering:** Case-insensitive substring filter across all columns (UI `Filter:` box or `--query-filter <TEXT>`).
+- **Column Sorting:** Numeric-aware ascending/descending sort on any column (clickable column headers/pills in UI or `--sort-col <INDEX> [--desc]`).
+- **Pagination:** Configurable page size (`10`, `25`, `50`, `100` in UI; `--page <N> --page-size <N>` in CLI) with `<< First`, `< Prev`, `Page X / Y`, `Next >`, `Last >>`.
+- **Export (`CSV`, `MD`, `TXT`, `JSON`):** One-click export buttons in `wincraft-app` (`exports/<dataset>_<timestamp>.<ext>`) and `--export <path>` on any CLI verb.
 
 ## 26 MCP Tools (`wincraft mcp` on stdio)
 
