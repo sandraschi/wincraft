@@ -3,11 +3,17 @@
 //! high-speed FileOps, NSSM-safe service control, and auto-backed-up Registry operations
 //! behind a single deterministic `dispatch` bus.
 
+pub mod export;
 pub mod fileops;
 pub mod hash;
 pub mod locks;
 pub mod proc_ports;
 pub mod sysadmin;
+
+pub use export::{
+    export_to_file, filter_sort_paginate, payload_to_tabular, render_payload, render_tabular,
+    OutputFormat, TabularData,
+};
 
 use serde::{Deserialize, Serialize};
 use serde_json::Value;

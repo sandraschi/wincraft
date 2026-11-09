@@ -5,7 +5,10 @@ use clap::{Parser, Subcommand};
 use serde_json::{json, Value};
 use std::io::{self, BufRead, Write};
 use std::path::PathBuf;
-use wincraft_core::{dispatch, tools_catalog, Command, ExecOptions};
+use wincraft_core::{
+    dispatch, filter_sort_paginate, payload_to_tabular, render_tabular, tools_catalog, Command,
+    ExecOptions, OutputFormat,
+};
 
 #[derive(Parser, Debug)]
 #[command(
@@ -26,15 +29,43 @@ struct Cli {
     #[arg(long, global = true)]
     root: Option<PathBuf>,
 
-    /// Emit JSON output
+    /// Output format: cards (default), list, json, csv, md, txt
+    #[arg(long, global = true, default_value = "cards")]
+    format: String,
+
+    /// Emit JSON output (shorthand for --format json)
     #[arg(long, global = true)]
     json: bool,
+
+    /// Filter output rows by case-insensitive substring
+    #[arg(long, global = true, default_value = "")]
+    query_filter: String,
+
+    /// Sort column index (0-based)
+    #[arg(long, global = true)]
+    sort_col: Option<usize>,
+
+    /// Sort descending instead of ascending
+    #[arg(long, global = true)]
+    desc: bool,
+
+    /// Page number (1-based)
+    #[arg(long, global = true, default_value_t = 1)]
+    page: usize,
+
+    /// Rows per page (0 = all rows)
+    #[arg(long, global = true, default_value_t = 25)]
+    page_size: usize,
+
+    /// Export formatted output to a file (.csv, .md, .txt, or .json)
+    #[arg(long, global = true)]
+    export: Option<PathBuf>,
 
     #[command(subcommand)]
     verb: Option<Verb>,
 }
 
-#[derive(Subcommand, Debug)]
+#[derive(Subcommand, Debug, Clone)]
 enum Verb {
     /// Host summary: disks, processes, RAM weeder candidates, and PATH health
     Status,
@@ -715,21 +746,95 @@ fn run_smoke(opts: &ExecOptions) -> i32 {
     0
 }
 
+fn emit_and_maybe_export(val: &Value, cli: &Cli) {
+    let fmt = if cli.json {
+        OutputFormat::Json
+    } else {
+        OutputFormat::parse_str(&cli.format)
+    };
+
+    let tab = payload_to_tabular(val);
+    let ascending = !cli.desc;
+    let effective_page_size = if cli.page_size == 0 {
+        tab.rows.len().max(1)
+    } else {
+        cli.page_size
+    };
+    let (paged_tab, total_rows, total_pages) = filter_sort_paginate(
+        tab.clone(),
+        Some(cli.query_filter.as_str()),
+        cli.sort_col,
+        ascending,
+        cli.page,
+        effective_page_size,
+    );
+
+    if let Some(ref export_path) = cli.export {
+        let ext = export_path
+            .extension()
+            .and_then(|e| e.to_str())
+            .unwrap_or("")
+            .to_lowercase();
+        let export_fmt = match ext.as_str() {
+            "csv" => OutputFormat::Csv,
+            "md" | "markdown" => OutputFormat::Md,
+            "txt" => OutputFormat::Txt,
+            "json" => OutputFormat::Json,
+            _ => fmt,
+        };
+        let total_cap = tab.rows.len().max(1);
+        let (all_filtered, _, _) = filter_sort_paginate(
+            tab,
+            Some(cli.query_filter.as_str()),
+            cli.sort_col,
+            ascending,
+            1,
+            total_cap,
+        );
+        let export_body = render_tabular(&all_filtered, val, export_fmt);
+        if let Some(parent) = export_path.parent() {
+            let _ = std::fs::create_dir_all(parent);
+        }
+        match std::fs::write(export_path, export_body) {
+            Ok(()) => eprintln!(
+                "[exported {} rows ({}) -> {}]",
+                all_filtered.rows.len(),
+                export_fmt.as_str(),
+                export_path.display()
+            ),
+            Err(e) => eprintln!("[export failed -> {}: {e}]", export_path.display()),
+        }
+    }
+
+    let rendered = render_tabular(&paged_tab, val, fmt);
+    println!("{rendered}");
+    if fmt != OutputFormat::Json && fmt != OutputFormat::Csv {
+        println!(
+            "--- Page {}/{} (showing {} of {} filtered rows; format={}) ---",
+            cli.page.min(total_pages),
+            total_pages,
+            paged_tab.rows.len(),
+            total_rows,
+            fmt.as_str()
+        );
+    }
+}
+
 fn main() {
     let cli = Cli::parse();
     let mut opts = ExecOptions::default();
     if cli.read_only {
         opts.read_only = true;
     }
-    if let Some(root) = cli.root {
-        opts.root = Some(root);
+    if let Some(ref root) = cli.root {
+        opts.root = Some(root.clone());
     }
 
     if cli.smoke {
         std::process::exit(run_smoke(&opts));
     }
 
-    let Some(verb) = cli.verb else {
+    let Some(ref verb) = cli.verb else {
         // Default to MCP stdio when invoked as `wincraft-mcp` without args, or status otherwise
         let arg0 = std::env::args().next().unwrap_or_default().to_lowercase();
         if arg0.contains("wincraft-mcp") {
@@ -737,10 +842,7 @@ fn main() {
         }
         match dispatch(&Command::Status, &opts) {
             Ok(v) => {
-                println!(
-                    "{}",
-                    serde_json::to_string_pretty(&v).unwrap_or_else(|_| "{}".to_string())
-                );
+                emit_and_maybe_export(&v, &cli);
                 std::process::exit(0);
             }
             Err(e) => {
@@ -750,17 +852,13 @@ fn main() {
         }
     };
 
-    let Some(cmd) = verb_to_command(verb) else {
+    let Some(cmd) = verb_to_command(verb.clone()) else {
         std::process::exit(run_mcp_stdio(&opts));
     };
 
     match dispatch(&cmd, &opts) {
         Ok(val) => {
-            let _ = cli.json; // JSON is canonical output across all headless verbs
-            println!(
-                "{}",
-                serde_json::to_string_pretty(&val).unwrap_or_else(|_| "{}".to_string())
-            );
+            emit_and_maybe_export(&val, &cli);
         }
         Err(err) => {
             eprintln!(
