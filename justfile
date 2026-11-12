@@ -19,7 +19,7 @@ smoke:
     cargo run -p wincraft-app -- --smoke
 
 app:
-    cargo run -p wincraft-app --release
+    pwsh -NoProfile -ExecutionPolicy Bypass -File start.ps1
 
 mcp:
     cargo run -p wincraft-mcp --bin wincraft --release -- mcp
