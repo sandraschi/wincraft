@@ -1,0 +1,145 @@
+{
+  "manifest_version": "0.2",
+  "name": "wincraft",
+  "display_name": "WinCraft",
+  "version": "__VERSION__",
+  "description": "L3 native egui desktop workstation for WinCraft",
+  "author": {
+    "name": "Sandra Schipal",
+    "url": "https://github.com/sandraschi"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/sandraschi/wincraft"
+  },
+  "license": "MIT OR Apache-2.0",
+  "server": {
+    "type": "binary",
+    "entry_point": "wincraft.exe",
+    "mcp_config": {
+      "command": "${__dirname}/wincraft.exe",
+      "args": [
+        "mcp"
+      ]
+    }
+  },
+  "compatibility": {
+    "platforms": [
+      "win32"
+    ]
+  },
+  "tools": [
+    {
+      "name": "win_status",
+      "description": "Host summary: version, read-only state, disk volumes, process count, and PATH health."
+    },
+    {
+      "name": "win_doctor",
+      "description": "Verify native Restart Manager FFI, Windows admin binaries (sc, reg, wevtutil, robocopy), and Sysinternals cache."
+    },
+    {
+      "name": "win_disk_list",
+      "description": "List logical disk volumes (A:..Z:) with free/used/total GB via Win32 GetDiskFreeSpaceExW."
+    },
+    {
+      "name": "win_env_audit",
+      "description": "Audit PATH environment variable for dead/missing directories and duplicate entries."
+    },
+    {
+      "name": "win_proc_list",
+      "description": "List running Windows processes sorted by memory usage with protected-process classification."
+    },
+    {
+      "name": "win_port_map",
+      "description": "Map active TCP/UDP ports to owning PIDs and correlate with fleet WEBAPP_PORTS.md assignments."
+    },
+    {
+      "name": "win_weeder_scan",
+      "description": "Scan for orphaned cargo test binaries, stale headless engines, and runaway workers holding RAM."
+    },
+    {
+      "name": "win_weeder_reap",
+      "description": "Terminate a non-protected process by PID (requires confirm=true; refuses protected system processes)."
+    },
+    {
+      "name": "win_lock_inspect",
+      "description": "Who locks this file or directory? Queries Windows Restart Manager (rstrtmgr.dll) for locking PIDs."
+    },
+    {
+      "name": "win_fs_list",
+      "description": "List directory contents with depth control, sizes, and modified timestamps."
+    },
+    {
+      "name": "win_fs_du",
+      "description": "Fast recursive directory disk usage breakdown + top file extensions."
+    },
+    {
+      "name": "win_fs_large",
+      "description": "Find largest files exceeding a byte threshold (optionally skipping build dirs)."
+    },
+    {
+      "name": "win_fs_dups",
+      "description": "3-stage streaming duplicate file detector (size -> 4KB SHA-256 prefix -> full 64KB streaming SHA-256)."
+    },
+    {
+      "name": "win_fs_hash",
+      "description": "Compute streaming FIPS 180-4 SHA-256 digest and byte size of a file."
+    },
+    {
+      "name": "win_fs_grep",
+      "description": "Search text files for a substring/pattern while skipping binary files and build directories."
+    },
+    {
+      "name": "win_fs_backup_write",
+      "description": "Write a file safely with mandatory timestamped .bak backup creation if the file exists (confirm=true)."
+    },
+    {
+      "name": "win_fs_undo_backup",
+      "description": "Restore the most recent .bak backup for a file (confirm=true)."
+    },
+    {
+      "name": "win_fs_archive_inspect",
+      "description": "Inspect entries and compression ratios inside a .zip archive."
+    },
+    {
+      "name": "win_fs_archive_create",
+      "description": "Create a deflated .zip archive from a file or directory (confirm=true)."
+    },
+    {
+      "name": "win_svc_list",
+      "description": "List Windows services with state and PID."
+    },
+    {
+      "name": "win_svc_control",
+      "description": "Start, stop, or restart a Windows service via sc.exe with NSSM-safe detection (confirm=true)."
+    },
+    {
+      "name": "win_startup_list",
+      "description": "List Windows startup autorun entries across HKCU/HKLM Run keys and Startup folders."
+    },
+    {
+      "name": "win_task_list",
+      "description": "List Windows Scheduled Tasks via schtasks."
+    },
+    {
+      "name": "win_reg_read",
+      "description": "Read values and subkeys from a Windows Registry key."
+    },
+    {
+      "name": "win_reg_write",
+      "description": "Write an HKCU Registry value after exporting a timestamped .reg backup (confirm=true)."
+    },
+    {
+      "name": "win_event_tail",
+      "description": "Query recent critical/error/warning events from a Windows Event Log channel."
+    },
+    {
+      "name": "win_cpu_audit",
+      "description": "Audit running processes for unauthorized CPU hogs, suspicious volatile paths, and known crypto miner signatures."
+    },
+    {
+      "name": "win_thermal_status",
+      "description": "Query host CPU load percentage, core topology, clock speeds, and thermal throttle heuristics."
+    }
+  ]
+}
