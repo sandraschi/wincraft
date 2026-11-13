@@ -1,5 +1,10 @@
 # WinCraft
 
+![License: MIT OR Apache-2.0](https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-blue.svg)
+![Rust 1.90+](https://img.shields.io/badge/rust-1.90%2B-orange?logo=rust)
+![MCP stdio](https://img.shields.io/badge/MCP-stdio-purple)
+![ArtCraft harness](https://img.shields.io/badge/ArtCraft-harness-green)
+
 Pure-Rust Windows host, RAM Weeder, Restart Manager file-lock inspector, high-speed FileOps, and NSSM-safe SysAdmin studio (`v0.1.0`).
 
 Subsumes `windows-operations-mcp`, `system-admin-mcp` (RAM Weeder), `sysinternals-mcp`, `filesystem-mcp`, `winrar-mcp`, and the retired Python `filecraft` scaffold into one zero-tax ArtCraft 3-tier workspace (`wincraft-core`, `wincraft-mcp`, `wincraft-app`).
@@ -20,6 +25,8 @@ cargo run -p wincraft-mcp --bin wincraft -- proc-list --page-size 10
 cargo run -p wincraft-mcp --bin wincraft -- svc-list --format list --sort-col 1 --page-size 15
 cargo run -p wincraft-mcp --bin wincraft -- disk-list --format md --export exports\disks.csv
 cargo run -p wincraft-mcp --bin wincraft -- lock-inspect --path D:\Dev\repos\wincraft\Cargo.toml
+cargo run -p wincraft-mcp --bin wincraft -- cpu-audit --page-size 10
+cargo run -p wincraft-mcp --bin wincraft -- thermal
 cargo run -p wincraft-mcp --bin wincraft -- weeder-scan
 cargo run -p wincraft-mcp --bin wincraft -- port-map
 cargo run -p wincraft-app
@@ -35,11 +42,11 @@ Every collection output in both the L3 `wincraft-app` desktop UI and the L2 `win
 - **Pagination:** Configurable page size (`10`, `25`, `50`, `100` in UI; `--page <N> --page-size <N>` in CLI) with `<< First`, `< Prev`, `Page X / Y`, `Next >`, `Last >>`.
 - **Export (`CSV`, `MD`, `TXT`, `JSON`):** One-click export buttons in `wincraft-app` (`exports/<dataset>_<timestamp>.<ext>`) and `--export <path>` on any CLI verb.
 
-## 26 MCP Tools (`wincraft mcp` on stdio)
+## 28 MCP Tools (`wincraft mcp` on stdio)
 
 | Domain | Tools |
 |---|---|
-| **System & Diagnostics** | `win_status`, `win_doctor`, `win_disk_list`, `win_env_audit` |
+| **System & Diagnostics** | `win_status`, `win_doctor`, `win_disk_list`, `win_env_audit`, `win_cpu_audit`, `win_thermal_status` |
 | **Processes & Ports** | `win_proc_list`, `win_port_map` (correlated with `WEBAPP_PORTS.md`) |
 | **RAM Weeder** | `win_weeder_scan`, `win_weeder_reap` (`confirm=true`, protected system allowlist) |
 | **File-Lock Inspector** | `win_lock_inspect` (native Win32 Restart Manager `rstrtmgr.dll` FFI) |
