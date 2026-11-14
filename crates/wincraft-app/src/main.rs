@@ -23,6 +23,7 @@ use wincraft_core::{
 enum Page {
     Dashboard,
     ProcsAndPorts,
+    CpuAuditAndThermals,
     RamWeeder,
     FileOps,
     LockInspector,
@@ -36,12 +37,13 @@ impl Page {
         match self {
             Page::Dashboard => "🖴 1. Host & Disks",
             Page::ProcsAndPorts => "⚡ 2. Processes & Ports",
-            Page::RamWeeder => "🧹 3. RAM Weeder",
-            Page::FileOps => "📂 4. High-Speed FileOps",
-            Page::LockInspector => "🔒 5. Who Locks This File?",
-            Page::ServicesNssm => "⚙ 6. Services & NSSM",
-            Page::StartupAndRegistry => "🔑 7. Startup & Registry",
-            Page::DoctorAndHelp => "🩺 8. Doctor, Tools & Brochure",
+            Page::CpuAuditAndThermals => "🔥 3. CPU Audit & Thermals",
+            Page::RamWeeder => "🧹 4. RAM Weeder",
+            Page::FileOps => "📂 5. High-Speed FileOps",
+            Page::LockInspector => "🔒 6. Who Locks This File?",
+            Page::ServicesNssm => "⚙ 7. Services & NSSM",
+            Page::StartupAndRegistry => "🔑 8. Startup & Registry",
+            Page::DoctorAndHelp => "🩺 9. Doctor, Tools & Brochure",
         }
     }
 }
@@ -82,8 +84,13 @@ pub struct WinCraftApp {
     startup_json: Option<Value>,
     reg_json: Option<Value>,
     events_json: Option<Value>,
+    cpu_audit_json: Option<Value>,
+    thermal_json: Option<Value>,
     proc_filter: String,
     port_filter: String,
+    cpu_filter: String,
+    min_cpu_sec: f64,
+    min_cpu_pct: f64,
     target_path: String,
     grep_query: String,
     lock_path: String,
@@ -131,8 +138,13 @@ impl Default for WinCraftApp {
             startup_json: None,
             reg_json: None,
             events_json: None,
+            cpu_audit_json: None,
+            thermal_json: None,
             proc_filter: String::new(),
             port_filter: String::new(),
+            cpu_filter: String::new(),
+            min_cpu_sec: 30.0,
+            min_cpu_pct: 5.0,
             target_path: r"D:\Dev\repos\wincraft".to_string(),
             grep_query: "WinCraft".to_string(),
             lock_path: r"D:\Dev\repos\wincraft\Cargo.toml".to_string(),
@@ -148,6 +160,13 @@ impl Default for WinCraftApp {
 
 fn apply_craft_theme(ctx: &egui::Context) {
     let mut visuals = egui::Visuals::dark();
+    let ink = Color32::from_rgb(242, 246, 252);
+    visuals.override_text_color = Some(ink);
+    visuals.weak_text_color = Some(Color32::from_rgb(203, 213, 225));
+    visuals.widgets.noninteractive.fg_stroke = Stroke::new(1.0, ink);
+    visuals.widgets.inactive.fg_stroke = Stroke::new(1.0, ink);
+    visuals.widgets.hovered.fg_stroke = Stroke::new(1.5, Color32::WHITE);
+    visuals.widgets.active.fg_stroke = Stroke::new(1.5, Color32::WHITE);
     visuals.panel_fill = Color32::from_rgb(13, 17, 23);
     visuals.window_fill = Color32::from_rgb(18, 23, 33);
     visuals.extreme_bg_color = Color32::from_rgb(9, 12, 17);
@@ -406,8 +425,9 @@ impl WinCraftApp {
         if self.sort_col >= col_count {
             self.sort_col = 0;
         }
+        self.page_num = self.page_num.max(1);
 
-        let (paged_tab, total_rows, total_pages) = filter_sort_paginate(
+        let (mut paged_tab, total_rows, total_pages) = filter_sort_paginate(
             tab.clone(),
             Some(self.table_filter.as_str()),
             Some(self.sort_col),
@@ -416,7 +436,16 @@ impl WinCraftApp {
             self.page_size,
         );
         if self.page_num > total_pages {
-            self.page_num = total_pages;
+            self.page_num = total_pages.max(1);
+            let (repaged, _, _) = filter_sort_paginate(
+                tab.clone(),
+                Some(self.table_filter.as_str()),
+                Some(self.sort_col),
+                self.sort_asc,
+                self.page_num,
+                self.page_size,
+            );
+            paged_tab = repaged;
         }
 
         // Control Bar 1: View Mode (Cards [default] | List | JSON), Filter, and Export (CSV | MD | TXT | JSON)
@@ -622,72 +651,95 @@ impl WinCraftApp {
                     });
             }
             OutputFormat::Cards | OutputFormat::Csv | OutputFormat::Md | OutputFormat::Txt => {
+                if paged_tab.rows.is_empty() {
+                    ui.label(
+                        RichText::new("No items to display (empty dataset or filter matched nothing). Try clearing the filter or switching to List view.")
+                            .color(Color32::from_rgb(148, 163, 184)),
+                    );
+                }
                 let start_idx = (self.page_num.saturating_sub(1)) * self.page_size + 1;
+                // Responsive columns: 1 column on narrow windows, 2 on wide.
+                // Fixed 510px min-width previously pushed the 2nd column off-screen
+                // (vertical-only ScrollArea => clipped cards looked like "cards broken").
+                let avail = ui.available_width();
+                let cols = if avail < 720.0 { 1 } else { 2 };
+                let card_w =
+                    ((avail - (cols as f32 - 1.0) * 14.0) / cols as f32 - 18.0).clamp(260.0, 620.0);
                 egui::Grid::new(format!("cards_{dataset_slug}"))
-                    .num_columns(2)
+                    .num_columns(cols)
                     .spacing([14.0, 12.0])
                     .show(ui, |ui| {
                         for (i, row) in paged_tab.rows.iter().enumerate() {
                             ui.group(|ui| {
-                                ui.set_min_width(510.0);
-                                let title_col = row.first().map(|s| s.as_str()).unwrap_or("-");
-                                let second_col = row.get(1).map(|s| s.as_str()).unwrap_or("");
+                                ui.set_min_width(card_w);
+                                ui.set_max_width(card_w);
+                                // Grid cells are LeftToRight: force a vertical
+                                // stack or every block lands side-by-side and
+                                // field rows collapse into a sliver.
+                                ui.vertical(|ui| {
+                                    let title_col = row.first().map(|s| s.as_str()).unwrap_or("-");
+                                    let second_col = row.get(1).map(|s| s.as_str()).unwrap_or("");
 
-                                // Card Header with status badges
-                                ui.horizontal_wrapped(|ui| {
-                                    badge(
-                                        ui,
-                                        &format!("#{}", start_idx + i),
-                                        Color32::from_rgb(103, 232, 249),
-                                        Color32::from_rgb(14, 33, 48),
-                                    );
-                                    ui.label(
-                                        RichText::new(title_col)
-                                            .size(15.5)
-                                            .strong()
-                                            .color(Color32::from_rgb(240, 246, 252)),
-                                    );
-                                    if !second_col.is_empty() {
-                                        ui.label(
-                                            RichText::new(format!("· {second_col}"))
-                                                .monospace()
-                                                .color(Color32::from_rgb(148, 163, 184)),
-                                        );
-                                    }
-                                    Self::render_card_badges(ui, dataset_slug, row);
-                                });
-
-                                // Optional visual gauge for Disks & Processes
-                                Self::render_card_gauge(ui, dataset_slug, row);
-
-                                ui.separator();
-                                for (h, val) in paged_tab.headers.iter().zip(row.iter()) {
+                                    // Card Header with status badges
                                     ui.horizontal_wrapped(|ui| {
-                                        ui.label(
-                                            RichText::new(format!("{h}:"))
-                                                .color(Color32::from_rgb(148, 163, 184)),
+                                        badge(
+                                            ui,
+                                            &format!("#{}", start_idx + i),
+                                            Color32::from_rgb(103, 232, 249),
+                                            Color32::from_rgb(14, 33, 48),
                                         );
-                                        ui.monospace(
-                                            RichText::new(val)
-                                                .color(Color32::from_rgb(226, 232, 240)),
+                                        ui.label(
+                                            RichText::new(title_col)
+                                                .size(15.5)
+                                                .strong()
+                                                .color(Color32::from_rgb(240, 246, 252)),
+                                        );
+                                        if !second_col.is_empty() {
+                                            ui.label(
+                                                RichText::new(format!("· {second_col}"))
+                                                    .monospace()
+                                                    .color(Color32::from_rgb(148, 163, 184)),
+                                            );
+                                        }
+                                        Self::render_card_badges(ui, dataset_slug, row);
+                                    });
+
+                                    // Optional visual gauge for Disks & Processes
+                                    Self::render_card_gauge(ui, dataset_slug, row);
+
+                                    ui.separator();
+                                    for (h, val) in paged_tab.headers.iter().zip(row.iter()) {
+                                        ui.horizontal_wrapped(|ui| {
+                                            ui.label(
+                                                RichText::new(format!("{h}:"))
+                                                    .color(Color32::from_rgb(148, 163, 184)),
+                                            );
+                                            ui.monospace(
+                                                RichText::new(val)
+                                                    .color(Color32::from_rgb(226, 232, 240)),
+                                            );
+                                        });
+                                    }
+
+                                    // Contextual Quick Actions footer
+                                    ui.separator();
+                                    ui.horizontal_wrapped(|ui| {
+                                        Self::render_row_quick_actions(
+                                            ui,
+                                            dataset_slug,
+                                            row,
+                                            &mut pending,
                                         );
                                     });
-                                }
-
-                                // Contextual Quick Actions footer
-                                ui.separator();
-                                ui.horizontal_wrapped(|ui| {
-                                    Self::render_row_quick_actions(
-                                        ui,
-                                        dataset_slug,
-                                        row,
-                                        &mut pending,
-                                    );
-                                });
+                                }); // end vertical card stack
                             });
-                            if i % 2 == 1 {
+                            if (i + 1) % cols == 0 {
                                 ui.end_row();
                             }
+                        }
+                        // Close a trailing incomplete row so a lone last card still renders.
+                        if paged_tab.rows.len() % cols != 0 {
+                            ui.end_row();
                         }
                     });
             }
@@ -807,6 +859,20 @@ impl WinCraftApp {
                     }
                 }
             }
+            "audit" => {
+                let pid_str = row.first().cloned().unwrap_or_default();
+                let status_str = row.get(2).map(|s| s.as_str()).unwrap_or("");
+                if ui.small_button("🔎 Filter PID").clicked() {
+                    *pending = Some(PendingAction::FilterProcessPid(pid_str.clone()));
+                }
+                if status_str.contains("UNAUTHORIZED") || status_str.contains("SUSPICIOUS") {
+                    if let Ok(pid) = pid_str.parse::<u32>() {
+                        if ui.small_button("🧹 Reap Rogue PID").clicked() {
+                            *pending = Some(PendingAction::ReapPid(pid));
+                        }
+                    }
+                }
+            }
             "ports" => {
                 if let Some(pid_str) = row.get(4) {
                     if ui.small_button("🔎 Filter Owning PID").clicked() {
@@ -911,6 +977,7 @@ impl eframe::App for WinCraftApp {
             for p in [
                 Page::Dashboard,
                 Page::ProcsAndPorts,
+                Page::CpuAuditAndThermals,
                 Page::RamWeeder,
                 Page::FileOps,
                 Page::LockInspector,
@@ -988,6 +1055,56 @@ impl eframe::App for WinCraftApp {
                     ui.separator();
                     ui.label(RichText::new("Running Processes:").strong());
                     self.render_dataset_controls_and_body(ui, "processes", &procs);
+                }
+            }
+            Page::CpuAuditAndThermals => {
+                ui.heading("CPU Hogger & Compute Audit + Host Thermals (Rogue Process & Miner Detector)");
+                ui.horizontal_wrapped(|ui| {
+                    if ui.button("🔥 Run CPU Hogger Audit").clicked() {
+                        let filter = if self.cpu_filter.trim().is_empty() {
+                            None
+                        } else {
+                            Some(self.cpu_filter.trim().to_string())
+                        };
+                        self.cpu_audit_json = self
+                            .exec(&Command::CpuAudit {
+                                filter,
+                                min_cpu_seconds: Some(self.min_cpu_sec),
+                                min_cpu_percent: Some(self.min_cpu_pct),
+                            })
+                            .ok();
+                    }
+                    if ui.button("🌡 Query Host Thermals").clicked() {
+                        self.thermal_json = self.exec(&Command::ThermalStatus).ok();
+                    }
+                    ui.separator();
+                    ui.label("Filter:");
+                    ui.text_edit_singleline(&mut self.cpu_filter);
+                    ui.label("Min CPU (s):");
+                    ui.add(
+                        egui::DragValue::new(&mut self.min_cpu_sec)
+                            .range(0.0..=3600.0)
+                            .speed(5.0),
+                    );
+                    ui.label("Min CPU (%):");
+                    ui.add(
+                        egui::DragValue::new(&mut self.min_cpu_pct)
+                            .range(0.0..=100.0)
+                            .speed(1.0),
+                    );
+                });
+                if let Some(ref therm) = self.thermal_json.clone() {
+                    ui.separator();
+                    ui.label(RichText::new("Host Processor & Thermal Metrics:").strong());
+                    self.render_dataset_controls_and_body(ui, "thermal", therm);
+                }
+                if let Some(ref audit) = self.cpu_audit_json.clone() {
+                    ui.separator();
+                    ui.label(
+                        RichText::new("Compute Audit Candidates & Rogue Process Detection:")
+                            .strong(),
+                    );
+                    self.render_dataset_controls_and_body(ui, "audit", audit);
                 }
             }
             Page::RamWeeder => {
@@ -1140,7 +1257,7 @@ impl eframe::App for WinCraftApp {
                 }
             }
             Page::DoctorAndHelp => {
-                ui.heading("Toolchain Doctor, Brochure Assets & 26 MCP Tools Catalog");
+                ui.heading("Toolchain Doctor, Brochure Assets & 28 MCP Tools Catalog");
                 ui.horizontal_wrapped(|ui| {
                     if ui.button("🩺 Re-run Doctor").clicked() {
                         self.doctor_json = self.exec(&Command::Doctor).ok();
@@ -1207,5 +1324,173 @@ mod tests {
         assert!(core_tools.is_ok());
         assert!(app_tools.is_ok());
         assert_eq!(core_tools.ok(), app_tools.ok());
+    }
+
+    /// Headless layout regression test for the Cards grid (no GPU needed:
+    /// `run_pass` only produces shapes). Fails if a card's field label and
+    /// value wrap onto separate lines (the "vertical sliver" bug) instead of
+    /// sharing one row.
+    #[test]
+    fn cards_grid_field_label_and_value_share_a_line() {
+        let payload = json!({
+            "volumes": [
+                {"mount": "C:\\", "used_percent": "94.7", "free_gb": "98.07", "total_gb": "1862.2"},
+                {"mount": "D:\\", "used_percent": "93.4", "free_gb": "122.75", "total_gb": "1862.91"}
+            ]
+        });
+        let mut app = WinCraftApp {
+            view_mode: OutputFormat::Cards,
+            ..Default::default()
+        };
+
+        let ctx = egui::Context::default();
+        let make_raw = || egui::RawInput {
+            screen_rect: Some(egui::Rect::from_min_size(
+                egui::Pos2::ZERO,
+                egui::vec2(1920.0, 1080.0),
+            )),
+            ..Default::default()
+        };
+        // Passes 1-2 warm fonts/layout; the final pass is inspected.
+        for _ in 0..2 {
+            let output = ctx.run_pass(make_raw(), |ctx| {
+                egui::Area::new(egui::Id::unique("cards_layout_test"))
+                    .fixed_pos(egui::Pos2::ZERO)
+                    .show(ctx, |ui| {
+                        ui.set_width(1920.0);
+                        egui::ScrollArea::vertical().show(ui, |ui| {
+                            app.render_dataset_controls_and_body(ui, "disks", &payload);
+                        });
+                    });
+            });
+            std::mem::forget(output.textures_delta);
+        }
+        // Re-run once more to collect positions for the assertions below.
+        let output = ctx.run_pass(make_raw(), |ctx| {
+            egui::Area::new(egui::Id::unique("cards_layout_test"))
+                .fixed_pos(egui::Pos2::ZERO)
+                .show(ctx, |ui| {
+                    ui.set_width(1920.0);
+                    egui::ScrollArea::vertical().show(ui, |ui| {
+                        app.render_dataset_controls_and_body(ui, "disks", &payload);
+                    });
+                });
+        });
+        std::mem::forget(output.textures_delta);
+
+        let mut mount_pos: Option<(f32, f32)> = None;
+        let mut values: Vec<(f32, f32)> = Vec::new();
+        let mut all: Vec<String> = Vec::new();
+        for clipped in &output.shapes {
+            if let egui::Shape::Text(ts) = &clipped.shape {
+                let text = ts.galley.text();
+                all.push(format!(
+                    "y={:6.1} x={:6.1} w={:6.1} h={:5.1} {text:?}",
+                    ts.pos.y,
+                    ts.pos.x,
+                    ts.galley.size().x,
+                    ts.galley.size().y
+                ));
+                if text == "Mount:" && mount_pos.is_none() {
+                    mount_pos = Some((ts.pos.x, ts.pos.y));
+                } else if text == "C:\\" {
+                    values.push((ts.pos.x, ts.pos.y));
+                }
+            }
+        }
+        all.sort();
+        assert!(
+            mount_pos.is_some() && !values.is_empty(),
+            "expected the 'Mount:' label and a 'C:\\' value to be laid out"
+        );
+        let (mx, my) = mount_pos.unwrap_or((0.0, 0.0));
+        // The field value must sit on the same line, just right of its label.
+        // (Matching by y alone is ambiguous: the card title is also "C:\\".)
+        let shares_line = values
+            .iter()
+            .any(|(x, y)| (y - my).abs() < 4.0 && *x - mx > 10.0 && *x - mx < 400.0);
+        assert!(
+            shares_line,
+            "card field label at ({mx:.1}, {my:.1}) has no value sharing its line; layout:\n{}",
+            all.join("\n")
+        );
+    }
+
+    /// Throwaway bisection harness (not part of the suite): minimal
+    /// group-in-grid card that dumps text geometry so the wrap collapse
+    /// can be bisected without touching prod code paths.
+    #[test]
+    fn cards_minimal_repro_probes() {
+        let ctx = egui::Context::default();
+        let make_raw = || egui::RawInput {
+            screen_rect: Some(egui::Rect::from_min_size(
+                egui::Pos2::ZERO,
+                egui::vec2(1920.0, 1080.0),
+            )),
+            ..Default::default()
+        };
+        for _ in 0..3 {
+            let output = ctx.run_pass(make_raw(), |ctx| {
+                egui::Area::new(egui::Id::unique("cards_min_repro"))
+                    .fixed_pos(egui::Pos2::ZERO)
+                    .show(ctx, |ui| {
+                        ui.set_width(1920.0);
+                        ui.horizontal(|ui| {
+                            eprintln!("H-ROW avail0={:.1}", ui.available_width());
+                            ui.label("AAA");
+                            eprintln!("H-ROW avail1={:.1}", ui.available_width());
+                            ui.label("BBB");
+                            eprintln!("H-ROW avail2={:.1}", ui.available_width());
+                        });
+                        ui.horizontal_wrapped(|ui| {
+                            eprintln!("W-ROW avail0={:.1}", ui.available_width());
+                            ui.label("AAA");
+                            eprintln!("W-ROW avail1={:.1}", ui.available_width());
+                            ui.label("BBB");
+                            eprintln!("W-ROW avail2={:.1}", ui.available_width());
+                        });
+                        egui::Grid::new("repro_grid").num_columns(2).show(ui, |ui| {
+                            for _ in 0..2 {
+                                ui.group(|ui| {
+                                    ui.set_min_width(620.0);
+                                    ui.set_max_width(620.0);
+                                    ui.vertical(|ui| {
+                                        ui.horizontal_wrapped(|ui| {
+                                            ui.label("Mount:");
+                                            ui.monospace("C:\\");
+                                        });
+                                        ui.horizontal_wrapped(|ui| {
+                                            ui.label("L2A");
+                                            ui.label("L2B");
+                                        });
+                                        ui.horizontal_wrapped(|ui| {
+                                            ui.small_button("BTN");
+                                            ui.label("after-btn");
+                                        });
+                                    });
+                                });
+                                ui.end_row();
+                            }
+                        });
+                    });
+            });
+            std::mem::forget(output.textures_delta);
+            let mut dump: Vec<String> = Vec::new();
+            for clipped in &output.shapes {
+                if let egui::Shape::Text(ts) = &clipped.shape {
+                    dump.push(format!(
+                        "y={:6.1} x={:6.1} w={:6.1} {:?}",
+                        ts.pos.y,
+                        ts.pos.x,
+                        ts.galley.size().x,
+                        ts.galley.text()
+                    ));
+                }
+            }
+            dump.sort();
+            for line in &dump {
+                eprintln!("MINI {line}");
+            }
+        }
     }
 }

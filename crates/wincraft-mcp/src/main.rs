@@ -71,7 +71,7 @@ enum Verb {
     Status,
     /// Probe native Restart Manager FFI, Windows system tools, and Sysinternals cache
     Doctor,
-    /// List all 26 MCP tools and their safety metadata
+    /// List all 28 MCP tools and their safety metadata
     Tools,
     /// List logical disk volumes (A:..Z:) via Win32 GetDiskFreeSpaceExW
     DiskList,
@@ -239,6 +239,17 @@ enum Verb {
         #[arg(long, default_value_t = 10)]
         count: usize,
     },
+    /// Audit running processes for unauthorized CPU hogs, suspicious paths, and crypto miners
+    CpuAudit {
+        #[arg(long)]
+        filter: Option<String>,
+        #[arg(long)]
+        min_cpu_sec: Option<f64>,
+        #[arg(long)]
+        min_cpu_pct: Option<f64>,
+    },
+    /// Query host processor topology, clock speeds, and thermal throttle heuristics
+    Thermal,
     /// Start stdio JSON-RPC 2.0 MCP server
     Mcp,
 }
@@ -359,6 +370,16 @@ fn verb_to_command(v: Verb) -> Option<Command> {
             confirm,
         }),
         Verb::EventTail { channel, count } => Some(Command::EventTail { channel, count }),
+        Verb::CpuAudit {
+            filter,
+            min_cpu_sec,
+            min_cpu_pct,
+        } => Some(Command::CpuAudit {
+            filter,
+            min_cpu_seconds: min_cpu_sec,
+            min_cpu_percent: min_cpu_pct,
+        }),
+        Verb::Thermal => Some(Command::ThermalStatus),
         Verb::Mcp => None,
     }
 }
@@ -521,6 +542,12 @@ pub fn parse_mcp_tool_call(tool_name: &str, args: &Value) -> Result<Command, Str
             channel: str_arg("channel").unwrap_or_else(|| "System".to_string()),
             count: u64_arg("count", 10) as usize,
         }),
+        "win_cpu_audit" | "cpu_audit" => Ok(Command::CpuAudit {
+            filter: str_arg("filter"),
+            min_cpu_seconds: args.get("min_cpu_seconds").and_then(|v| v.as_f64()),
+            min_cpu_percent: args.get("min_cpu_percent").and_then(|v| v.as_f64()),
+        }),
+        "win_thermal_status" | "thermal_status" | "thermal" => Ok(Command::ThermalStatus),
         other => Err(format!("Unknown WinCraft MCP tool: {other}")),
     }
 }
@@ -551,6 +578,8 @@ fn build_mcp_tools_schema() -> Value {
                         "value": { "type": "string", "description": "Registry value name" },
                         "data": { "type": "string", "description": "Registry value data" },
                         "channel": { "type": "string", "description": "Event log channel (System or Application)" },
+                        "min_cpu_seconds": { "type": "number", "description": "Minimum cumulative CPU seconds threshold for audit" },
+                        "min_cpu_percent": { "type": "number", "description": "Minimum instantaneous CPU percent threshold for audit" },
                         "confirm": { "type": "boolean", "description": "Required true for mutating verbs" }
                     }
                 }
@@ -897,7 +926,7 @@ mod tests {
             .and_then(|v| v.as_array())
             .map(|a| a.len())
             .unwrap_or(0);
-        assert_eq!(count, 26);
+        assert_eq!(count, 28);
     }
 
     #[test]
