@@ -204,6 +204,71 @@ pub fn payload_to_tabular(payload: &Value) -> TabularData {
         };
     }
 
+    if let Some(arr) = payload.get("audit_entries").and_then(|v| v.as_array()) {
+        let headers = vec![
+            "PID".to_string(),
+            "Name".to_string(),
+            "Status".to_string(),
+            "CPU (s)".to_string(),
+            "CPU %".to_string(),
+            "Memory (MB)".to_string(),
+            "Reason".to_string(),
+            "Path".to_string(),
+        ];
+        let rows = arr
+            .iter()
+            .map(|item| {
+                vec![
+                    val_str(item, "pid"),
+                    val_str(item, "name"),
+                    val_str(item, "status_badge"),
+                    val_str(item, "cpu_seconds"),
+                    val_str(item, "cpu_percent"),
+                    val_str(item, "memory_mb"),
+                    val_str(item, "reason"),
+                    val_str(item, "path"),
+                ]
+            })
+            .collect();
+        return TabularData {
+            title: "CPU Hogger & Compute Audit".to_string(),
+            headers,
+            rows,
+        };
+    }
+
+    if let Some(_obj) = payload.get("thermal_report").and_then(|v| v.as_object()) {
+        let report = &payload["thermal_report"];
+        let headers = vec!["Metric".to_string(), "Value".to_string()];
+        let rows = vec![
+            vec!["Processor".to_string(), val_str(report, "processor_name")],
+            vec!["Status".to_string(), val_str(report, "status")],
+            vec!["Load %".to_string(), val_str(report, "load_percentage")],
+            vec!["Physical Cores".to_string(), val_str(report, "cores")],
+            vec![
+                "Logical Processors".to_string(),
+                val_str(report, "logical_processors"),
+            ],
+            vec![
+                "Max Clock (MHz)".to_string(),
+                val_str(report, "max_clock_mhz"),
+            ],
+            vec![
+                "Current Clock (MHz)".to_string(),
+                val_str(report, "current_clock_mhz"),
+            ],
+            vec![
+                "Throttle Detected".to_string(),
+                val_str(report, "throttle_detected"),
+            ],
+        ];
+        return TabularData {
+            title: "Host Processor & Thermal Status".to_string(),
+            headers,
+            rows,
+        };
+    }
+
     if let Some(arr) = payload.get("duplicates").and_then(|v| v.as_array()) {
         let headers = vec![
             "SHA-256".to_string(),
