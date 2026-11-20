@@ -3,6 +3,7 @@
 //! high-speed FileOps, NSSM-safe service control, and auto-backed-up Registry operations
 //! behind a single deterministic `dispatch` bus.
 
+pub mod cpu_audit;
 pub mod export;
 pub mod fileops;
 pub mod hash;
@@ -215,6 +216,12 @@ pub enum Command {
         channel: String,
         count: usize,
     },
+    CpuAudit {
+        filter: Option<String>,
+        min_cpu_seconds: Option<f64>,
+        min_cpu_percent: Option<f64>,
+    },
+    ThermalStatus,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -410,6 +417,20 @@ pub fn tools_catalog() -> Vec<ToolSpec> {
             confirm_gated: false,
             description: "Query recent critical/error/warning events from a Windows Event Log channel.",
         },
+        ToolSpec {
+            name: "win_cpu_audit",
+            domain: "diagnostics",
+            read_only: true,
+            confirm_gated: false,
+            description: "Audit running processes for unauthorized CPU hogs, suspicious volatile paths, and known crypto miner signatures.",
+        },
+        ToolSpec {
+            name: "win_thermal_status",
+            domain: "diagnostics",
+            read_only: true,
+            confirm_gated: false,
+            description: "Query host CPU load percentage, core topology, clock speeds, and thermal throttle heuristics.",
+        },
     ]
 }
 
@@ -581,6 +602,15 @@ pub fn dispatch(cmd: &Command, opts: &ExecOptions) -> Result<Value, WinError> {
         Command::EventTail { channel, count } => {
             sysadmin::event_tail(channel, *count).map_err(|e| WinError::new("EVENT_ERROR", e))
         }
+        Command::CpuAudit {
+            filter,
+            min_cpu_seconds,
+            min_cpu_percent,
+        } => cpu_audit::cpu_audit(filter.as_deref(), *min_cpu_seconds, *min_cpu_percent, None)
+            .map_err(|e| WinError::new("CPU_AUDIT_ERROR", e)),
+        Command::ThermalStatus => {
+            cpu_audit::thermal_status().map_err(|e| WinError::new("THERMAL_ERROR", e))
+        }
     }
 }
 
@@ -590,9 +620,9 @@ mod tests {
     use std::fs;
 
     #[test]
-    fn catalog_has_26_tools_and_valid_metadata() {
+    fn catalog_has_28_tools_and_valid_metadata() {
         let tools = tools_catalog();
-        assert_eq!(tools.len(), 26);
+        assert_eq!(tools.len(), 28);
         for t in &tools {
             assert!(t.name.starts_with("win_"));
             assert!(!t.description.is_empty());

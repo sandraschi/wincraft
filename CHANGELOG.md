@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.2.0] - 2026-11-11
+
+### Added
+- **CPU Hogger & Compute Audit (`win_cpu_audit` / `wincraft cpu-audit`)**: Audits running processes for high cumulative or instantaneous CPU consumption, categorizing into Precleared System, Precleared Dev, Unauthorized Hogs, Suspicious Paths (volatile `%TEMP%` / `Downloads` / system masquerading outside System32), and Known Crypto Miner Signatures (`xmrig`, `minerd`, `ethminer`, `nbminer`, etc.).
+- **Host Thermal & Processor Diagnostics (`win_thermal_status` / `wincraft thermal`)**: Queries CPU load percentage, core count, logical processors, clock speeds, and thermal throttling state under high heat.
+- **Dedicated Desktop Page in `wincraft-app`**: 9-page workstation featuring `Page 3: CPU Audit & Thermals` with instant reap quick actions for rogue PIDs, customizable threshold sliders for CPU seconds and CPU %, Cards/List/JSON view switching, and full tabular export.
+- Expanded WinCraft tool suite from 26 to 28 MCP tools.
+
 ## [0.1.0] - 2026-11-09
 
 ### Added
