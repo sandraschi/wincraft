@@ -98,6 +98,7 @@ pub struct WinCraftApp {
     reg_key: String,
     last_message: String,
     show_help_modal: bool,
+    dark_mode: bool,
 }
 
 impl Default for WinCraftApp {
@@ -154,11 +155,12 @@ impl Default for WinCraftApp {
                 "Ready — Cards view active (switchable to List/JSON, sortable, filterable, paginated, exportable)."
                     .to_string(),
             show_help_modal: false,
+            dark_mode: true,
         }
     }
 }
 
-fn apply_craft_theme(ctx: &egui::Context) {
+fn harsh_visuals() -> egui::Visuals {
     let mut visuals = egui::Visuals::dark();
     let ink = Color32::from_rgb(242, 246, 252);
     visuals.override_text_color = Some(ink);
@@ -172,17 +174,105 @@ fn apply_craft_theme(ctx: &egui::Context) {
     visuals.extreme_bg_color = Color32::from_rgb(9, 12, 17);
     visuals.faint_bg_color = Color32::from_rgb(22, 29, 41);
     visuals.widgets.noninteractive.bg_fill = Color32::from_rgb(20, 26, 36);
-    visuals.widgets.noninteractive.bg_stroke = Stroke::new(1.0, Color32::from_rgb(42, 54, 74));
+    visuals.widgets.noninteractive.bg_stroke = Stroke::new(1.0, Color32::from_rgb(38, 54, 84));
     visuals.widgets.noninteractive.corner_radius = CornerRadius::same(6);
     visuals.widgets.inactive.bg_fill = Color32::from_rgb(28, 37, 52);
+    visuals.widgets.inactive.bg_stroke = Stroke::new(1.0, Color32::from_rgb(48, 66, 102));
     visuals.widgets.inactive.corner_radius = CornerRadius::same(6);
     visuals.widgets.hovered.bg_fill = Color32::from_rgb(38, 56, 82);
+    visuals.widgets.hovered.bg_stroke = Stroke::new(1.5, Color32::from_rgb(103, 232, 249));
     visuals.widgets.hovered.corner_radius = CornerRadius::same(6);
     visuals.widgets.active.bg_fill = Color32::from_rgb(14, 116, 144);
     visuals.widgets.active.corner_radius = CornerRadius::same(6);
     visuals.selection.bg_fill = Color32::from_rgb(14, 116, 144);
     visuals.selection.stroke = Stroke::new(1.0, Color32::from_rgb(103, 232, 249));
-    ctx.set_visuals(visuals);
+    visuals
+}
+
+fn crisp_light_visuals() -> egui::Visuals {
+    let mut visuals = egui::Visuals::light();
+    let ink = Color32::from_rgb(15, 23, 42);
+    visuals.override_text_color = Some(ink);
+    visuals.weak_text_color = Some(Color32::from_rgb(51, 65, 85));
+    visuals.widgets.noninteractive.fg_stroke = Stroke::new(1.0, ink);
+    visuals.widgets.inactive.fg_stroke = Stroke::new(1.0, ink);
+    visuals.widgets.hovered.fg_stroke = Stroke::new(1.5, ink);
+    visuals.widgets.active.fg_stroke = Stroke::new(1.5, Color32::WHITE);
+    visuals.panel_fill = Color32::from_rgb(248, 250, 252);
+    visuals.window_fill = Color32::WHITE;
+    visuals.extreme_bg_color = Color32::from_rgb(241, 245, 249);
+    visuals.faint_bg_color = Color32::from_rgb(226, 232, 240);
+    visuals.widgets.noninteractive.bg_fill = Color32::WHITE;
+    visuals.widgets.noninteractive.bg_stroke = Stroke::new(1.0, Color32::from_rgb(203, 213, 225));
+    visuals.widgets.noninteractive.corner_radius = CornerRadius::same(6);
+    visuals.widgets.inactive.bg_fill = Color32::from_rgb(226, 232, 240);
+    visuals.widgets.inactive.bg_stroke = Stroke::new(1.0, Color32::from_rgb(148, 163, 184));
+    visuals.widgets.inactive.corner_radius = CornerRadius::same(6);
+    visuals.widgets.hovered.bg_fill = Color32::from_rgb(224, 242, 254);
+    visuals.widgets.hovered.bg_stroke = Stroke::new(1.5, Color32::from_rgb(14, 165, 233));
+    visuals.widgets.hovered.corner_radius = CornerRadius::same(6);
+    visuals.widgets.active.bg_fill = Color32::from_rgb(14, 116, 144);
+    visuals.widgets.active.corner_radius = CornerRadius::same(6);
+    visuals.selection.bg_fill = Color32::from_rgb(186, 230, 253);
+    visuals.selection.stroke = Stroke::new(1.0, Color32::from_rgb(2, 132, 199));
+    visuals
+}
+
+fn apply_craft_theme(ctx: &egui::Context) {
+    ctx.set_visuals(harsh_visuals());
+}
+
+fn handle_zoom(ctx: &egui::Context) {
+    // egui 0.37: Ctrl+Wheel arrives as zoom_delta() != 1.0 (keyboard
+    // Ctrl+Plus/Minus/0 is already handled natively by zoom_with_keyboard).
+    let zoom_delta = ctx.input(|i| i.zoom_delta());
+    if (zoom_delta - 1.0).abs() > f32::EPSILON {
+        let next = (ctx.zoom_factor() * zoom_delta).clamp(0.6, 2.5);
+        ctx.set_zoom_factor(next);
+    }
+}
+
+fn theme_toggle_button(ui: &mut egui::Ui, dark_mode: &mut bool) -> bool {
+    let size = egui::vec2(28.0, 28.0);
+    let (rect, resp) = ui.allocate_exact_size(size, egui::Sense::click());
+    if ui.is_rect_visible(rect) {
+        let visuals = ui.style().interact(&resp);
+        ui.painter().rect(
+            rect,
+            CornerRadius::same(6),
+            visuals.bg_fill,
+            visuals.bg_stroke,
+            egui::StrokeKind::Inside,
+        );
+        let center = rect.center();
+        let painter = ui.painter();
+        if *dark_mode {
+            let sun_color = Color32::from_rgb(251, 191, 36);
+            painter.circle_filled(center, 4.5, sun_color);
+            for i in 0..8 {
+                let angle = (i as f32) * std::f32::consts::TAU / 8.0;
+                let dir = egui::vec2(angle.cos(), angle.sin());
+                painter.line_segment(
+                    [center + dir * 6.5, center + dir * 9.2],
+                    Stroke::new(1.6, sun_color),
+                );
+            }
+        } else {
+            let moon_color = Color32::from_rgb(51, 65, 85);
+            painter.circle_filled(center, 6.5, moon_color);
+            painter.circle_filled(center + egui::vec2(3.0, -2.2), 5.5, visuals.bg_fill);
+        }
+    }
+    let clicked = resp.on_hover_text("Toggle Light / Dark theme").clicked();
+    if clicked {
+        *dark_mode = !*dark_mode;
+        ui.ctx().set_visuals(if *dark_mode {
+            harsh_visuals()
+        } else {
+            crisp_light_visuals()
+        });
+    }
+    clicked
 }
 
 fn badge(ui: &mut egui::Ui, text: &str, fg: Color32, bg: Color32) {
@@ -922,6 +1012,7 @@ impl WinCraftApp {
 
 impl eframe::App for WinCraftApp {
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
+        handle_zoom(ui.ctx());
         if !self.theme_applied {
             apply_craft_theme(ui.ctx());
             self.theme_applied = true;
@@ -930,10 +1021,19 @@ impl eframe::App for WinCraftApp {
         // Top Header Bar
         ui.horizontal_wrapped(|ui| {
             ui.heading(
-                RichText::new("⚡ WinCraft v0.1.0")
+                RichText::new("WinCraft v0.2.0")
                     .color(Color32::from_rgb(103, 232, 249))
                     .strong(),
             );
+            theme_toggle_button(ui, &mut self.dark_mode);
+            let zoom_pct = (ui.ctx().zoom_factor() * 100.0).round() as i32;
+            if ui
+                .button(format!("{zoom_pct}%"))
+                .on_hover_text("UI zoom (Ctrl+Wheel). Click to reset to 100%.")
+                .clicked()
+            {
+                ui.ctx().set_zoom_factor(1.0);
+            }
             ui.separator();
             ui.checkbox(&mut self.opts.read_only, "Read-Only Guard");
             ui.checkbox(&mut self.arm_confirm, "Arm Confirm Gate");
@@ -1319,11 +1419,33 @@ mod tests {
     fn app_dispatch_matches_core_dispatch_and_defaults_to_cards() {
         let mut app = WinCraftApp::default();
         assert_eq!(app.view_mode, OutputFormat::Cards);
+        assert!(app.dark_mode);
         let core_tools = dispatch(&Command::Tools, &ExecOptions::default());
         let app_tools = app.exec(&Command::Tools);
         assert!(core_tools.is_ok());
         assert!(app_tools.is_ok());
         assert_eq!(core_tools.ok(), app_tools.ok());
+    }
+
+    #[test]
+    fn dark_and_light_visuals_differ_with_high_contrast() {
+        let dark = harsh_visuals();
+        let light = crisp_light_visuals();
+        assert_ne!(dark.panel_fill, light.panel_fill);
+        assert_eq!(dark.panel_fill, Color32::from_rgb(13, 17, 23));
+        assert_eq!(light.panel_fill, Color32::from_rgb(248, 250, 252));
+        assert_eq!(
+            light.override_text_color,
+            Some(Color32::from_rgb(15, 23, 42))
+        );
+    }
+
+    #[test]
+    fn zoom_factor_clamp_stays_within_bounds() {
+        for z in [0.1_f32, 0.6, 1.0, 2.5, 5.0] {
+            let clamped = z.clamp(0.6, 2.5);
+            assert!((0.6..=2.5).contains(&clamped));
+        }
     }
 
     /// Headless layout regression test for the Cards grid (no GPU needed:
