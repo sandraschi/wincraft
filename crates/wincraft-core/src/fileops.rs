@@ -480,6 +480,14 @@ pub fn fs_grep(
     }))
 }
 
+/// Normalize all line endings to LF. Fleet standard is LF-only
+/// (`* text=auto eol=lf`). Rust `fs::write` writes bytes as-is, so a
+/// CRLF payload would stay CRLF. Normalizing here keeps every file
+/// written through WinCraft LF-only even when the caller passes CRLF.
+fn normalize_to_lf(s: &str) -> String {
+    s.replace("\r\n", "\n").replace('\r', "\n")
+}
+
 /// Safe file write with mandatory timestamped `.bak` backup if the file already exists.
 pub fn fs_backup_write(
     path: &Path,
@@ -511,7 +519,8 @@ pub fn fs_backup_write(
         fs::create_dir_all(parent).map_err(|e| format!("Failed to create parent dir: {e}"))?;
     }
 
-    fs::write(path, content.as_bytes()).map_err(|e| format!("Failed to write file: {e}"))?;
+    fs::write(path, normalize_to_lf(content).as_bytes())
+        .map_err(|e| format!("Failed to write file: {e}"))?;
     let (sha256, bytes) =
         sha256_file(path).map_err(|e| format!("Failed to hash written file: {e}"))?;
 
@@ -708,4 +717,29 @@ pub fn fs_archive_create(
         "uncompressed_bytes": bytes_added,
         "archive_bytes": zip_size,
     }))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn backup_write_normalizes_crlf_to_lf() {
+        let Ok(tmp) = tempfile::tempdir() else {
+            return;
+        };
+        let file = tmp.path().join("lf.txt");
+        let res = fs_backup_write(&file, "a\r\nb\rc\nd\n", true, false);
+        assert!(res.is_ok());
+        let raw = fs::read(&file).unwrap_or_default();
+        assert!(!raw.windows(2).any(|w| w == b"\r\n"), "CRLF leaked");
+        assert!(!raw.contains(&b'\r'), "lone CR leaked");
+        assert_eq!(raw, b"a\nb\nc\nd\n");
+    }
+
+    #[test]
+    fn normalize_to_lf_handles_mixed_endings() {
+        assert_eq!(normalize_to_lf("a\r\nb\rc\nd"), "a\nb\nc\nd");
+        assert_eq!(normalize_to_lf("plain\n"), "plain\n");
+    }
 }

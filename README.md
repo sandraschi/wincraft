@@ -63,6 +63,18 @@ Every collection output in both the L3 `wincraft-app` desktop UI and the L2 `win
 | **High-Speed FileOps** | `win_fs_list`, `win_fs_du`, `win_fs_large`, `win_fs_dups` (3-stage streaming SHA-256), `win_fs_hash`, `win_fs_grep`, `win_fs_backup_write` (mandatory `.bak`), `win_fs_undo_backup`, `win_fs_archive_inspect`, `win_fs_archive_create` |
 | **SysAdmin & Registry** | `win_svc_list`, `win_svc_control` (NSSM-safe `sc.exe`), `win_startup_list`, `win_task_list`, `win_reg_read`, `win_reg_write` (auto `.reg` backup), `win_event_tail` |
 
+## Feature matrix
+
+| Area | Status | Notes |
+|---|---|---|
+| CLI (`wincraft` 28 verbs, Cards/List/JSON, filter/sort/page/export) | Implemented | `cargo run -p wincraft-mcp --bin wincraft -- --help` |
+| MCP stdio (`wincraft mcp`, 28 tools) | Implemented | `initialize` to `tools/list` to `tools/call`, stdout pure JSON-RPC |
+| L3 egui 9-page workstation | Implemented | Cards default, List/JSON, filter/sort/page/export, brochure buttons |
+| CPU audit + thermals | Implemented | v0.2.0: `win_cpu_audit`, `win_thermal_status`, Page 3 |
+| FileOps LF writes + `.bak` | Implemented | `fs_backup_write` LF-normalized, mandatory `.bak` |
+| Light theme contrast + Ctrl+wheel zoom | Planned | Dark theme today; tracked for T2 polish |
+| NSIS installer + portable exes | Partial | `scripts/release.ps1` stages `dist/`; no tag published yet |
+
 ## Safety Invariants
 
 1. **Confirmation Gate:** Every mutating verb (`weeder_reap`, `fs_backup_write`, `fs_undo_backup`, `fs_archive_create`, `svc_control`, `reg_write`) requires `confirm: true` (or `--confirm`).

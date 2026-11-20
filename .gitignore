@@ -1,6 +1,14 @@
 /target
 /dist
-*.bak
+*.exe
+*.zip
+*.mcpb
 *.pdb
+*.bak
+*.bak.*
+.env
 .DS_Store
 Thumbs.db
+exports/
+.env.example
+!exports/.gitkeep

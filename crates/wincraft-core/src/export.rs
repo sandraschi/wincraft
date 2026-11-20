@@ -668,7 +668,8 @@ pub fn export_to_file(
         }
     }
     let content = render_tabular(tab, raw_payload, fmt);
-    fs::write(dest, content.as_bytes()).map_err(|e| format!("Failed to write export file: {e}"))?;
+    let lf = content.replace("\r\n", "\n").replace('\r', "\n");
+    fs::write(dest, lf.as_bytes()).map_err(|e| format!("Failed to write export file: {e}"))?;
     Ok(dest.display().to_string())
 }
 
@@ -722,5 +723,33 @@ mod tests {
         let cards = format_cards_txt(&sorted);
         assert!(cards.contains("Card #1"));
         assert!(cards.contains("beta.exe"));
+    }
+
+    #[test]
+    fn export_to_file_writes_lf_only_and_roundtrips() {
+        let tab = TabularData {
+            title: "T".to_string(),
+            headers: vec!["A".to_string(), "B".to_string()],
+            rows: vec![vec!["x".to_string(), "y".to_string()]],
+        };
+        let Ok(tmp) = tempfile::tempdir() else {
+            return;
+        };
+        let dest = tmp.path().join("out.csv");
+        let payload = serde_json::json!({});
+        let res = export_to_file(&tab, &payload, OutputFormat::Csv, &dest);
+        assert!(res.is_ok());
+        let raw = std::fs::read(&dest).unwrap_or_default();
+        assert!(!raw.contains(&b'\r'), "CR leaked into export");
+        let text = String::from_utf8_lossy(&raw);
+        assert!(text.contains("A,B"));
+    }
+
+    #[test]
+    fn output_format_parse_and_extension_are_stable() {
+        assert_eq!(OutputFormat::parse_str("list"), OutputFormat::List);
+        assert_eq!(OutputFormat::parse_str("JSON"), OutputFormat::Json);
+        assert_eq!(OutputFormat::Csv.extension(), "csv");
+        assert_eq!(OutputFormat::Md.extension(), "md");
     }
 }
