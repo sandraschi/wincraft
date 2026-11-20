@@ -6,7 +6,7 @@
 - CI: `.github/workflows/rust-ci.yml` (fmt, clippy `-D warnings`, `cargo test --workspace`).
 - README feature matrix (Implemented / Partial / Planned).
 - LF guarantee: `fs_backup_write` and exports normalize CRLF/CR to LF.
-- Tests: backup-write LF roundtrip, LF mixed-endings unit, export LF roundtrip, `OutputFormat` parse/extension (22 total: 17 core + 2 mcp + 3 app).
+- Tests: backup-write LF roundtrip, LF mixed-endings unit, export LF roundtrip, `OutputFormat` parse/extension, T2 integration suite (53 total: 17 core unit + 29 core integration + 2 mcp + 5 app).
 
 ## [0.2.0] - 2026-11-11
 
