@@ -250,6 +250,31 @@ enum Verb {
     },
     /// Query host processor topology, clock speeds, and thermal throttle heuristics
     Thermal,
+    /// Sub-second NTFS MFT wildcard file search
+    MftSearch {
+        #[arg(long)]
+        pattern: String,
+        #[arg(long)]
+        path: Option<String>,
+        #[arg(long)]
+        all: bool,
+        #[arg(long)]
+        limit: Option<usize>,
+    },
+    /// Fast MFT-based disk space consumption summary
+    DiskUsage {
+        #[arg(long)]
+        path: String,
+        #[arg(long)]
+        top: Option<usize>,
+    },
+    /// Generate self-contained interactive D3.js cushion treemap HTML
+    Treemap {
+        #[arg(long)]
+        path: String,
+        #[arg(long)]
+        out: Option<String>,
+    },
     /// Start stdio JSON-RPC 2.0 MCP server
     Mcp,
 }
@@ -380,6 +405,22 @@ fn verb_to_command(v: Verb) -> Option<Command> {
             min_cpu_percent: min_cpu_pct,
         }),
         Verb::Thermal => Some(Command::ThermalStatus),
+        Verb::MftSearch {
+            pattern,
+            path,
+            all,
+            limit,
+        } => Some(Command::MftSearch {
+            pattern,
+            path,
+            search_all: all,
+            limit,
+        }),
+        Verb::DiskUsage { path, top } => Some(Command::DiskUsageMft { path, top_n: top }),
+        Verb::Treemap { path, out } => Some(Command::TreemapHtml {
+            path,
+            out_file: out,
+        }),
         Verb::Mcp => None,
     }
 }
@@ -548,6 +589,37 @@ pub fn parse_mcp_tool_call(tool_name: &str, args: &Value) -> Result<Command, Str
             min_cpu_percent: args.get("min_cpu_percent").and_then(|v| v.as_f64()),
         }),
         "win_thermal_status" | "thermal_status" | "thermal" => Ok(Command::ThermalStatus),
+        "win_mft_search" | "mft_search" | "wiztree_search" => {
+            let pattern = str_arg("pattern").ok_or_else(|| "Missing 'pattern'".to_string())?;
+            Ok(Command::MftSearch {
+                pattern,
+                path: str_arg("path"),
+                search_all: bool_arg("all", false) || bool_arg("search_all", false),
+                limit: args
+                    .get("limit")
+                    .or_else(|| args.get("max_results"))
+                    .and_then(|v| v.as_u64())
+                    .map(|u| u as usize),
+            })
+        }
+        "win_disk_usage" | "disk_usage" | "wiztree_disk_usage" => {
+            let path = str_arg("path").unwrap_or_else(|| "C:\\".to_string());
+            Ok(Command::DiskUsageMft {
+                path,
+                top_n: args
+                    .get("top_n")
+                    .or_else(|| args.get("top"))
+                    .and_then(|v| v.as_u64())
+                    .map(|u| u as usize),
+            })
+        }
+        "win_treemap" | "treemap" | "wiztree_treemap" => {
+            let path = str_arg("path").unwrap_or_else(|| "C:\\".to_string());
+            Ok(Command::TreemapHtml {
+                path,
+                out_file: str_arg("out").or_else(|| str_arg("out_file")),
+            })
+        }
         other => Err(format!("Unknown WinCraft MCP tool: {other}")),
     }
 }
@@ -568,6 +640,10 @@ fn build_mcp_tools_schema() -> Value {
                     "type": "object",
                     "properties": {
                         "path": { "type": "string", "description": "Target file or directory path" },
+                        "pattern": { "type": "string", "description": "Wildcard pattern for MFT file search (e.g. *.pdf)" },
+                        "all": { "type": "boolean", "description": "Search all connected fixed NTFS drives" },
+                        "top": { "type": "integer", "description": "Top N largest files or extensions" },
+                        "out": { "type": "string", "description": "Output path for treemap HTML" },
                         "filter": { "type": "string", "description": "Optional name/substring filter" },
                         "query": { "type": "string", "description": "Search query for win_fs_grep" },
                         "pid": { "type": "integer", "description": "Process ID for win_weeder_reap" },
@@ -926,7 +1002,7 @@ mod tests {
             .and_then(|v| v.as_array())
             .map(|a| a.len())
             .unwrap_or(0);
-        assert_eq!(count, 28);
+        assert_eq!(count, 31);
     }
 
     #[test]

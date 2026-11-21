@@ -10,6 +10,7 @@ pub mod hash;
 pub mod locks;
 pub mod proc_ports;
 pub mod sysadmin;
+pub mod wiztree;
 
 pub use export::{
     export_to_file, filter_sort_paginate, payload_to_tabular, render_payload, render_tabular,
@@ -222,6 +223,20 @@ pub enum Command {
         min_cpu_percent: Option<f64>,
     },
     ThermalStatus,
+    MftSearch {
+        pattern: String,
+        path: Option<String>,
+        search_all: bool,
+        limit: Option<usize>,
+    },
+    DiskUsageMft {
+        path: String,
+        top_n: Option<usize>,
+    },
+    TreemapHtml {
+        path: String,
+        out_file: Option<String>,
+    },
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -431,6 +446,27 @@ pub fn tools_catalog() -> Vec<ToolSpec> {
             confirm_gated: false,
             description: "Query host CPU load percentage, core topology, clock speeds, and thermal throttle heuristics.",
         },
+        ToolSpec {
+            name: "win_mft_search",
+            domain: "storage",
+            read_only: true,
+            confirm_gated: false,
+            description: "Sub-second NTFS Master File Table (MFT) wildcard file search across single or all fixed drives.",
+        },
+        ToolSpec {
+            name: "win_disk_usage",
+            domain: "storage",
+            read_only: true,
+            confirm_gated: false,
+            description: "Fast MFT-based disk space consumption summary, top largest files, and extension breakdown.",
+        },
+        ToolSpec {
+            name: "win_treemap",
+            domain: "storage",
+            read_only: true,
+            confirm_gated: false,
+            description: "Generate self-contained interactive D3.js hierarchical cushion treemap HTML.",
+        },
     ]
 }
 
@@ -611,6 +647,106 @@ pub fn dispatch(cmd: &Command, opts: &ExecOptions) -> Result<Value, WinError> {
         Command::ThermalStatus => {
             cpu_audit::thermal_status().map_err(|e| WinError::new("THERMAL_ERROR", e))
         }
+        Command::MftSearch {
+            pattern,
+            path,
+            search_all,
+            limit,
+        } => {
+            let max_r = limit.unwrap_or(500);
+            let target_path = path.clone().unwrap_or_else(|| "C:\\".to_string());
+            let mut target_drives = Vec::new();
+            if *search_all || target_path == "*" || target_path.eq_ignore_ascii_case("all") {
+                for d in wiztree::list_fixed_drives() {
+                    target_drives.push(d.root);
+                }
+            } else {
+                let drive_prefix =
+                    if target_path.len() >= 2 && target_path.chars().nth(1) == Some(':') {
+                        format!("{}:\\", target_path.chars().next().unwrap_or('C'))
+                    } else {
+                        "C:\\".to_string()
+                    };
+                target_drives.push(drive_prefix);
+            }
+
+            let mut all_results = Vec::new();
+            for drive in &target_drives {
+                let remaining = if max_r > 0 && max_r > all_results.len() {
+                    max_r - all_results.len()
+                } else {
+                    max_r
+                };
+                if max_r > 0 && all_results.len() >= max_r {
+                    break;
+                }
+                if let Ok(mut records) = wiztree::search_single_drive(drive, pattern, remaining) {
+                    if target_path != "*"
+                        && !target_path.eq_ignore_ascii_case("all")
+                        && target_path.len() > 3
+                    {
+                        let norm_filter = target_path.to_lowercase();
+                        records.retain(|r| r.path.to_lowercase().starts_with(&norm_filter));
+                    }
+                    all_results.extend(records);
+                }
+            }
+
+            let result = wiztree::SearchResult {
+                success: true,
+                pattern: pattern.clone(),
+                search_path: target_path,
+                count: all_results.len(),
+                results: all_results,
+                drives_searched: target_drives,
+            };
+            serde_json::to_value(result)
+                .map_err(|e| WinError::new("SERIALIZE_ERROR", e.to_string()))
+        }
+        Command::DiskUsageMft { path, top_n } => {
+            let n = top_n.unwrap_or(25);
+            let drive_prefix = if path.len() >= 2 && path.chars().nth(1) == Some(':') {
+                format!("{}:\\", path.chars().next().unwrap_or('C'))
+            } else {
+                "C:\\".to_string()
+            };
+            let records = wiztree::scan_drive_usage(&drive_prefix, 5000)
+                .map_err(|e| WinError::new("WIZTREE_ERROR", e))?;
+            let summary = wiztree::analyze_disk_records(path, &records, n);
+            serde_json::to_value(summary)
+                .map_err(|e| WinError::new("SERIALIZE_ERROR", e.to_string()))
+        }
+        Command::TreemapHtml { path, out_file } => {
+            let drive_prefix = if path.len() >= 2 && path.chars().nth(1) == Some(':') {
+                format!("{}:\\", path.chars().next().unwrap_or('C'))
+            } else {
+                "C:\\".to_string()
+            };
+            let records = wiztree::scan_drive_usage(&drive_prefix, 5000)
+                .map_err(|e| WinError::new("WIZTREE_ERROR", e))?;
+            let html = wiztree::generate_treemap_html(path, &records);
+
+            if let Some(out_p) = out_file {
+                std::fs::write(out_p, &html).map_err(|e| {
+                    WinError::new("IO_ERROR", format!("Failed to write treemap HTML: {e}"))
+                })?;
+                Ok(serde_json::json!({
+                    "success": true,
+                    "output_file": out_p,
+                    "size_bytes": html.len(),
+                }))
+            } else {
+                let temp_html = std::env::temp_dir().join("wincraft_treemap.html");
+                std::fs::write(&temp_html, &html).map_err(|e| {
+                    WinError::new("IO_ERROR", format!("Failed to write treemap HTML: {e}"))
+                })?;
+                Ok(serde_json::json!({
+                    "success": true,
+                    "output_file": temp_html.display().to_string(),
+                    "size_bytes": html.len(),
+                }))
+            }
+        }
     }
 }
 
@@ -620,9 +756,9 @@ mod tests {
     use std::fs;
 
     #[test]
-    fn catalog_has_28_tools_and_valid_metadata() {
+    fn catalog_has_31_tools_and_valid_metadata() {
         let tools = tools_catalog();
-        assert_eq!(tools.len(), 28);
+        assert_eq!(tools.len(), 31);
         for t in &tools {
             assert!(t.name.starts_with("win_"));
             assert!(!t.description.is_empty());

@@ -452,9 +452,9 @@ fn output_format_parse_and_extension_matrix() {
 // ---------- dispatch bus ----------
 
 #[test]
-fn tools_catalog_has_28_confirm_gated_mutations() {
+fn tools_catalog_has_31_confirm_gated_mutations() {
     let tools = tools_catalog();
-    assert_eq!(tools.len(), 28);
+    assert_eq!(tools.len(), 31);
     for t in &tools {
         if !t.read_only {
             assert!(

@@ -9,15 +9,44 @@
 //! - Live substring filtering, numeric-aware column sorting, pagination, and CSV/MD/TXT/JSON export
 //! - One-click launchers for the repository's PDF and EPUB brochures (`docs/brochure/`)
 
-use eframe::egui::{self, Color32, CornerRadius, RichText, Stroke};
+use eframe::egui::{self, Color32, CornerRadius, RichText, Stroke, Vec2};
 use serde_json::{json, Value};
 use std::path::PathBuf;
 use std::process::Command as ProcessCommand;
 use std::time::{SystemTime, UNIX_EPOCH};
+use wincraft_core::wiztree::{
+    self, compute_hierarchical_treemap, DiskUsageSummary, LayoutRect, TreeNode, TreemapTile,
+};
 use wincraft_core::{
     dispatch, filter_sort_paginate, payload_to_tabular, render_tabular, tools_catalog, Command,
     ExecOptions, OutputFormat,
 };
+
+fn find_node_by_path<'a>(node: &'a TreeNode, target: &str) -> Option<&'a TreeNode> {
+    if node.path.eq_ignore_ascii_case(target)
+        || node
+            .path
+            .trim_end_matches(['\\', '/'])
+            .eq_ignore_ascii_case(target.trim_end_matches(['\\', '/']))
+    {
+        return Some(node);
+    }
+    for child in &node.children {
+        if let Some(found) = find_node_by_path(child, target) {
+            return Some(found);
+        }
+    }
+    None
+}
+
+fn format_bytes(bytes: u64) -> String {
+    let mb = bytes as f64 / 1_048_576.0;
+    if mb >= 1024.0 {
+        format!("{:.2} GB", mb / 1024.0)
+    } else {
+        format!("{:.1} MB", mb)
+    }
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Page {
@@ -30,6 +59,7 @@ enum Page {
     ServicesNssm,
     StartupAndRegistry,
     DoctorAndHelp,
+    DiskTreemap,
 }
 
 impl Page {
@@ -44,6 +74,7 @@ impl Page {
             Page::ServicesNssm => "⚙ 7. Services & NSSM",
             Page::StartupAndRegistry => "🔑 8. Startup & Registry",
             Page::DoctorAndHelp => "🩺 9. Doctor, Tools & Brochure",
+            Page::DiskTreemap => "🗺 10. MFT Cushion Treemap",
         }
     }
 }
@@ -99,6 +130,10 @@ pub struct WinCraftApp {
     last_message: String,
     show_help_modal: bool,
     dark_mode: bool,
+    treemap_drive: String,
+    treemap_summary: Option<DiskUsageSummary>,
+    treemap_zoom_path: Option<String>,
+    treemap_selected_tile: Option<TreemapTile>,
 }
 
 impl Default for WinCraftApp {
@@ -156,6 +191,10 @@ impl Default for WinCraftApp {
                     .to_string(),
             show_help_modal: false,
             dark_mode: true,
+            treemap_drive: "C:\\".to_string(),
+            treemap_summary: None,
+            treemap_zoom_path: None,
+            treemap_selected_tile: None,
         }
     }
 }
@@ -1008,6 +1047,533 @@ impl WinCraftApp {
             _ => {}
         }
     }
+
+    fn render_treemap_page(&mut self, ui: &mut egui::Ui, ctx: &egui::Context) {
+        let fixed_drives = wiztree::list_fixed_drives();
+        let is_elevated = wiztree::is_elevated();
+
+        ui.horizontal(|ui| {
+            ui.heading(
+                RichText::new("🗺️ Hierarchical Cushion Treemap")
+                    .strong()
+                    .color(Color32::from_rgb(56, 189, 248)),
+            );
+            ui.add_space(8.0);
+
+            ui.label(RichText::new("Drive:").color(Color32::GRAY));
+            for d in &fixed_drives {
+                let can_mft = wiztree::can_read_mft(&d.root);
+                let label = if can_mft {
+                    format!("{} ✓ (MFT Ready)", d.root)
+                } else {
+                    format!("{} 🔒 (Needs Admin)", d.root)
+                };
+                if ui
+                    .selectable_label(self.treemap_drive == d.root, label)
+                    .clicked()
+                {
+                    self.treemap_drive = d.root.clone();
+                    self.treemap_zoom_path = None;
+                    self.treemap_selected_tile = None;
+                }
+            }
+
+            ui.separator();
+
+            if ui.button("⚡ Scan MFT Drive").clicked() {
+                let drive_target = self.treemap_drive.clone();
+                match wiztree::scan_drive_usage(&drive_target, 5000) {
+                    Ok(records) => {
+                        let summary = wiztree::analyze_disk_records(&drive_target, &records, 50);
+                        self.last_message = format!(
+                            "MFT scan complete for {drive_target}: {} files scanned ({:.2} GB)",
+                            summary.total_files,
+                            summary.total_size_bytes as f64 / 1_073_741_824.0
+                        );
+                        self.treemap_summary = Some(summary);
+                        self.treemap_zoom_path = None;
+                        self.treemap_selected_tile = None;
+                    }
+                    Err(e) => {
+                        self.last_message = format!("MFT scan failed for {drive_target}: {e}");
+                    }
+                }
+            }
+
+            if let Some(summary) = &self.treemap_summary {
+                if ui.button("🌐 Open Interactive D3 in Browser").clicked() {
+                    let html =
+                        wiztree::generate_treemap_html(&summary.path, &summary.largest_files);
+                    let temp_p = std::env::temp_dir().join("wincraft_treemap.html");
+                    let _ = std::fs::write(&temp_p, html);
+                    let _ = std::process::Command::new("cmd")
+                        .args(["/c", "start", "", &temp_p.to_string_lossy()])
+                        .spawn();
+                }
+            }
+
+            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                if let Some(summary) = &self.treemap_summary {
+                    let total_gb = (summary.total_size_bytes as f64) / 1_073_741_824.0;
+                    ui.label(
+                        RichText::new(format!(
+                            "{:.2} GB Scanned ({} files)",
+                            total_gb, summary.total_files
+                        ))
+                        .strong()
+                        .color(Color32::WHITE),
+                    );
+                }
+            });
+        });
+
+        if !is_elevated {
+            ui.add_space(2.0);
+            ui.horizontal(|ui| {
+                ui.label(RichText::new("ℹ️ User Privilege Notice:").color(Color32::from_rgb(245, 158, 11)).strong());
+                ui.label("Running as standard user. For instant 1-second MFT scans on restricted drives (C:\\, D:\\), click '🛡️ Relaunch as Admin' in the top header.");
+            });
+        }
+
+        ui.separator();
+
+        let Some(summary) = self.treemap_summary.clone() else {
+            ui.add_space(20.0);
+            ui.vertical_centered(|ui| {
+                ui.label(RichText::new("Select a fixed drive above and click '⚡ Scan MFT Drive' to render the cushion treemap.").color(Color32::GRAY));
+                ui.label(RichText::new("WizTree direct MFT reads complete in sub-seconds with zero CPU waste.").color(Color32::DARK_GRAY).small());
+            });
+            return;
+        };
+
+        let Some(tree_root) = &summary.file_tree else {
+            ui.label("No file tree available in summary.");
+            return;
+        };
+
+        let active_root = if let Some(target) = &self.treemap_zoom_path {
+            match find_node_by_path(tree_root, target) {
+                Some(n) => n,
+                None => tree_root,
+            }
+        } else {
+            tree_root
+        };
+
+        // Breadcrumb Navigation
+        let mut next_zoom_path: Option<Option<String>> = None;
+        ui.horizontal(|ui| {
+            ui.label(RichText::new("Location:").color(Color32::GRAY).small());
+            if ui
+                .button(RichText::new(format!("📁 Root ({})", tree_root.name)).small())
+                .clicked()
+            {
+                next_zoom_path = Some(None);
+            }
+
+            if let Some(zoom_p) = &self.treemap_zoom_path {
+                let relative = if zoom_p.starts_with(&tree_root.path) {
+                    zoom_p[tree_root.path.len()..].trim_start_matches(['\\', '/'])
+                } else {
+                    zoom_p.as_str()
+                };
+
+                let mut accumulated = tree_root.path.clone();
+                for part in relative.split(['\\', '/']).filter(|s| !s.is_empty()) {
+                    accumulated.push('\\');
+                    accumulated.push_str(part);
+                    let target_path = accumulated.clone();
+                    ui.label(RichText::new(">").color(Color32::DARK_GRAY).small());
+                    if ui.button(RichText::new(part).small().strong()).clicked() {
+                        next_zoom_path = Some(Some(target_path));
+                    }
+                }
+            }
+
+            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                if self.treemap_zoom_path.is_some() && ui.button("⬆️ Zoom Out to Root").clicked()
+                {
+                    next_zoom_path = Some(None);
+                }
+            });
+        });
+        if let Some(target) = next_zoom_path {
+            self.treemap_zoom_path = target;
+        }
+
+        // Top Category Legend
+        ui.horizontal(|ui| {
+            ui.label(RichText::new("File Types:").color(Color32::GRAY).small());
+            let legend_items = [
+                ("Videos (.mp4, .mkv)", Color32::from_rgb(168, 85, 247)),
+                ("Archives (.zip, .iso)", Color32::from_rgb(249, 115, 22)),
+                ("Binaries (.exe, .dll)", Color32::from_rgb(34, 197, 94)),
+                (
+                    "AI / Data (.safetensors, .db)",
+                    Color32::from_rgb(236, 72, 153),
+                ),
+                ("Docs (.pdf, .docx)", Color32::from_rgb(56, 189, 248)),
+            ];
+            for (name, color) in legend_items {
+                ui.horizontal(|ui| {
+                    let (rect, _) = ui.allocate_exact_size(Vec2::splat(10.0), egui::Sense::hover());
+                    ui.painter().rect_filled(rect, 2.0, color);
+                    ui.label(RichText::new(name).small());
+                });
+            }
+        });
+
+        ui.add_space(4.0);
+
+        let inspector_height = 44.0;
+        let available_rect = ui.available_rect_before_wrap();
+        let treemap_rect = egui::Rect::from_min_size(
+            available_rect.min,
+            Vec2::new(
+                available_rect.width(),
+                (available_rect.height() - inspector_height).max(140.0),
+            ),
+        );
+
+        let canvas_response = ui.allocate_rect(treemap_rect, egui::Sense::click());
+        let painter = ui.painter_at(treemap_rect);
+
+        // Draw dark canvas background
+        painter.rect_filled(treemap_rect, 4.0, Color32::from_rgb(11, 15, 25));
+        painter.rect_stroke(
+            treemap_rect,
+            4.0,
+            egui::Stroke::new(1.0, Color32::from_rgb(30, 41, 59)),
+            egui::StrokeKind::Outside,
+        );
+
+        let pointer_pos = ctx.pointer_hover_pos();
+        let mut hovered_tile: Option<TreemapTile> = None;
+        let mut hovered_folder: Option<TreemapTile> = None;
+        let mut new_selected_tile: Option<TreemapTile> = None;
+        let mut new_zoom_folder: Option<String> = None;
+
+        let bounds = LayoutRect {
+            x: treemap_rect.min.x,
+            y: treemap_rect.min.y,
+            w: treemap_rect.width(),
+            h: treemap_rect.height(),
+        };
+
+        let layout = compute_hierarchical_treemap(active_root, bounds, 5);
+
+        // Draw Folder Enveloping Containers
+        for folder in &layout.folder_tiles {
+            let rect = egui::Rect::from_min_size(
+                egui::pos2(folder.rect.x, folder.rect.y),
+                Vec2::new(folder.rect.w, folder.rect.h),
+            );
+
+            if rect.width() < 4.0 || rect.height() < 4.0 {
+                continue;
+            }
+
+            let is_f_hovered = pointer_pos.is_some_and(|pos| rect.contains(pos));
+            if is_f_hovered {
+                hovered_folder = Some(folder.clone());
+                if canvas_response.clicked() {
+                    new_zoom_folder = Some(folder.path.clone());
+                }
+            }
+
+            painter.rect_filled(rect, 3.0, Color32::from_rgb(15, 23, 42));
+            painter.rect_stroke(
+                rect,
+                3.0,
+                egui::Stroke::new(1.2, Color32::from_rgb(51, 65, 85)),
+                egui::StrokeKind::Outside,
+            );
+
+            if rect.width() > 65.0 && rect.height() > 36.0 {
+                let header_rect =
+                    egui::Rect::from_min_size(rect.min, Vec2::new(rect.width(), 14.0));
+                painter.rect_filled(header_rect, 2.0, Color32::from_rgb(30, 41, 59));
+
+                let header_clip = painter.with_clip_rect(header_rect);
+                header_clip.text(
+                    header_rect.left_top() + Vec2::new(4.0, 1.0),
+                    egui::Align2::LEFT_TOP,
+                    format!("📁 {}", folder.name),
+                    egui::FontId::proportional(10.0),
+                    Color32::from_rgb(203, 213, 225),
+                );
+
+                let size_str = format_bytes(folder.size);
+                header_clip.text(
+                    header_rect.right_top() - Vec2::new(4.0, -1.0),
+                    egui::Align2::RIGHT_TOP,
+                    size_str,
+                    egui::FontId::proportional(9.0),
+                    Color32::from_rgb(148, 163, 184),
+                );
+            }
+        }
+
+        // Draw File Cushions
+        for file in &layout.file_tiles {
+            let rect = egui::Rect::from_min_size(
+                egui::pos2(file.rect.x, file.rect.y),
+                Vec2::new(file.rect.w, file.rect.h),
+            );
+
+            let tile_rect = rect.shrink(1.0);
+            if tile_rect.width() <= 1.0 || tile_rect.height() <= 1.0 {
+                continue;
+            }
+
+            let is_hovered = pointer_pos.is_some_and(|pos| tile_rect.contains(pos));
+            if is_hovered {
+                hovered_tile = Some(file.clone());
+                if canvas_response.clicked() {
+                    new_selected_tile = Some(file.clone());
+                }
+                if canvas_response.double_clicked() {
+                    let _ = std::process::Command::new("explorer")
+                        .args(["/select,", &file.path])
+                        .spawn();
+                }
+            }
+
+            let base_color =
+                Color32::from_rgb(file.color_rgb[0], file.color_rgb[1], file.color_rgb[2]);
+
+            painter.rect_filled(tile_rect, 2.0, base_color);
+
+            // 3D Cushion Bevel borders
+            painter.line_segment(
+                [tile_rect.left_top(), tile_rect.right_top()],
+                egui::Stroke::new(1.2, Color32::from_rgba_unmultiplied(255, 255, 255, 80)),
+            );
+            painter.line_segment(
+                [tile_rect.left_top(), tile_rect.left_bottom()],
+                egui::Stroke::new(1.2, Color32::from_rgba_unmultiplied(255, 255, 255, 65)),
+            );
+            painter.line_segment(
+                [tile_rect.left_bottom(), tile_rect.right_bottom()],
+                egui::Stroke::new(1.2, Color32::from_rgba_unmultiplied(0, 0, 0, 110)),
+            );
+            painter.line_segment(
+                [tile_rect.right_top(), tile_rect.right_bottom()],
+                egui::Stroke::new(1.2, Color32::from_rgba_unmultiplied(0, 0, 0, 110)),
+            );
+
+            if tile_rect.width() > 18.0 && tile_rect.height() > 18.0 {
+                let shine_w = (tile_rect.width() * 0.45).min(40.0);
+                let shine_h = (tile_rect.height() * 0.45).min(40.0);
+                let shine_rect = egui::Rect::from_min_size(
+                    tile_rect.min + Vec2::splat(1.5),
+                    Vec2::new(shine_w, shine_h),
+                );
+                painter.rect_filled(
+                    shine_rect,
+                    2.0,
+                    Color32::from_rgba_unmultiplied(255, 255, 255, 25),
+                );
+            }
+
+            let is_selected = self
+                .treemap_selected_tile
+                .as_ref()
+                .is_some_and(|s| s.path == file.path);
+            if is_hovered {
+                painter.rect_stroke(
+                    tile_rect,
+                    2.0,
+                    egui::Stroke::new(2.5, Color32::from_rgb(250, 204, 21)),
+                    egui::StrokeKind::Outside,
+                );
+            } else if is_selected {
+                painter.rect_stroke(
+                    tile_rect,
+                    2.0,
+                    egui::Stroke::new(2.0, Color32::from_rgb(56, 189, 248)),
+                    egui::StrokeKind::Outside,
+                );
+            }
+
+            if tile_rect.width() > 50.0 && tile_rect.height() > 22.0 {
+                let text_clip = painter.with_clip_rect(tile_rect);
+                let size_str = format_bytes(file.size);
+
+                let label_pos = tile_rect.left_top() + Vec2::new(5.0, 3.0);
+                text_clip.text(
+                    label_pos + Vec2::splat(1.0),
+                    egui::Align2::LEFT_TOP,
+                    &file.name,
+                    egui::FontId::proportional(11.0),
+                    Color32::from_black_alpha(200),
+                );
+                text_clip.text(
+                    label_pos,
+                    egui::Align2::LEFT_TOP,
+                    &file.name,
+                    egui::FontId::proportional(11.0),
+                    Color32::WHITE,
+                );
+
+                if tile_rect.width() > 70.0 && tile_rect.height() > 38.0 {
+                    let size_pos = tile_rect.right_bottom() - Vec2::new(5.0, 3.0);
+                    text_clip.text(
+                        size_pos + Vec2::splat(1.0),
+                        egui::Align2::RIGHT_BOTTOM,
+                        &size_str,
+                        egui::FontId::proportional(10.0),
+                        Color32::from_black_alpha(200),
+                    );
+                    text_clip.text(
+                        size_pos,
+                        egui::Align2::RIGHT_BOTTOM,
+                        &size_str,
+                        egui::FontId::proportional(10.0),
+                        Color32::from_rgb(226, 232, 240),
+                    );
+                }
+            }
+        }
+
+        // Draw Enclosing Parent Folder Outline on File Hover
+        if let Some(hovered_f) = &hovered_tile {
+            if let Some(parent) = layout
+                .folder_tiles
+                .iter()
+                .find(|p| p.path == hovered_f.parent_path)
+            {
+                let p_rect = egui::Rect::from_min_size(
+                    egui::pos2(parent.rect.x, parent.rect.y),
+                    Vec2::new(parent.rect.w, parent.rect.h),
+                );
+                painter.rect_stroke(
+                    p_rect,
+                    3.0,
+                    egui::Stroke::new(2.0, Color32::from_rgb(56, 189, 248)),
+                    egui::StrokeKind::Outside,
+                );
+            }
+        }
+
+        if let Some(st) = new_selected_tile {
+            self.treemap_selected_tile = Some(st);
+        }
+        if let Some(zf) = new_zoom_folder {
+            self.treemap_zoom_path = Some(zf);
+        }
+
+        // Tooltip
+        if let Some(hovered) = &hovered_tile {
+            let size_str = format_bytes(hovered.size);
+            if let Some(pos) = pointer_pos {
+                egui::Area::new(egui::Id::unique("treemap_hover_tip"))
+                    .fixed_pos(pos + Vec2::new(14.0, 14.0))
+                    .order(egui::Order::Tooltip)
+                    .show(ctx, |ui| {
+                        egui::Frame::popup(ui.style()).show(ui, |ui| {
+                            ui.strong(&hovered.name);
+                            ui.label(
+                                RichText::new(format!("Path: {}", hovered.path))
+                                    .color(Color32::from_rgb(148, 163, 184)),
+                            );
+                            ui.label(
+                                RichText::new(format!("Enclosing Folder: {}", hovered.parent_path))
+                                    .color(Color32::from_rgb(56, 189, 248))
+                                    .small(),
+                            );
+                            ui.horizontal(|ui| {
+                                ui.label("Size:");
+                                ui.label(
+                                    RichText::new(format!("{} ({} bytes)", size_str, hovered.size))
+                                        .color(Color32::from_rgb(56, 189, 248))
+                                        .strong(),
+                                );
+                            });
+                            if !hovered.extension.is_empty() {
+                                ui.label(format!("Extension: .{}", hovered.extension));
+                            }
+                        });
+                    });
+            }
+        } else if let Some(hf) = &hovered_folder {
+            let size_str = format_bytes(hf.size);
+            if let Some(pos) = pointer_pos {
+                egui::Area::new(egui::Id::unique("treemap_folder_tip"))
+                    .fixed_pos(pos + Vec2::new(14.0, 14.0))
+                    .order(egui::Order::Tooltip)
+                    .show(ctx, |ui| {
+                        egui::Frame::popup(ui.style()).show(ui, |ui| {
+                            ui.strong(format!("📁 {}", hf.name));
+                            ui.label(
+                                RichText::new(format!("Path: {}", hf.path))
+                                    .color(Color32::from_rgb(148, 163, 184)),
+                            );
+                            ui.horizontal(|ui| {
+                                ui.label("Cumulative Size:");
+                                ui.label(
+                                    RichText::new(format!("{} ({} bytes)", size_str, hf.size))
+                                        .color(Color32::from_rgb(56, 189, 248))
+                                        .strong(),
+                                );
+                            });
+                            ui.label(
+                                RichText::new("💡 Click folder to zoom into contents")
+                                    .color(Color32::GRAY)
+                                    .small(),
+                            );
+                        });
+                    });
+            }
+        }
+
+        // Bottom Inspector Bar
+        ui.add_space(4.0);
+        ui.horizontal(|ui| {
+            if let Some(tile) = &self.treemap_selected_tile {
+                let size_str = format_bytes(tile.size);
+                let icon = if tile.is_folder { "📁" } else { "📄" };
+                ui.label(RichText::new(format!("{icon} {}", tile.name)).strong());
+                ui.label(
+                    RichText::new(format!("• {size_str}"))
+                        .color(Color32::from_rgb(56, 189, 248))
+                        .strong(),
+                );
+                ui.label(
+                    RichText::new(format!("• {}", tile.path))
+                        .color(Color32::from_rgb(148, 163, 184))
+                        .small(),
+                );
+
+                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                    if ui.button("📂 Reveal in Explorer").clicked() {
+                        let _ = std::process::Command::new("explorer")
+                            .args(["/select,", &tile.path])
+                            .spawn();
+                    }
+                    if ui.button("📋 Copy Path").clicked() {
+                        ui.ctx().copy_text(tile.path.clone());
+                    }
+                    if ui
+                        .button("🔒 Who Locks This?")
+                        .on_hover_text("Switch to Restart Manager Lock Inspector for this path")
+                        .clicked()
+                    {
+                        self.lock_path = tile.path.clone();
+                        self.page = Page::LockInspector;
+                    }
+                    if tile.is_folder && ui.button("🔍 Zoom In").clicked() {
+                        self.treemap_zoom_path = Some(tile.path.clone());
+                    }
+                });
+            } else {
+                ui.label(
+                    RichText::new("Hover or click any cushion tile or folder to inspect.")
+                        .color(Color32::GRAY),
+                );
+            }
+        });
+    }
 }
 
 impl eframe::App for WinCraftApp {
@@ -1033,6 +1599,36 @@ impl eframe::App for WinCraftApp {
                 .clicked()
             {
                 ui.ctx().set_zoom_factor(1.0);
+            }
+            ui.separator();
+            let is_admin = wiztree::is_elevated();
+            if is_admin {
+                ui.label(
+                    RichText::new("🛡️ [Admin]")
+                        .color(Color32::from_rgb(34, 197, 94))
+                        .strong(),
+                );
+            } else {
+                ui.label(RichText::new("👤 [User]").color(Color32::from_rgb(245, 158, 11)));
+                if ui
+                    .button(
+                        RichText::new("🛡️ Relaunch as Admin")
+                            .color(Color32::from_rgb(245, 158, 11))
+                            .strong(),
+                    )
+                    .on_hover_text("Restart elevated via UAC for raw MFT direct-read access")
+                    .clicked()
+                {
+                    if let Ok(exe) = std::env::current_exe() {
+                        let _ = std::process::Command::new("powershell")
+                            .args([
+                                "-Command",
+                                &format!("Start-Process '{}' -Verb RunAs", exe.display()),
+                            ])
+                            .spawn();
+                        ui.ctx().send_viewport_cmd(egui::ViewportCommand::Close);
+                    }
+                }
             }
             ui.separator();
             ui.checkbox(&mut self.opts.read_only, "Read-Only Guard");
@@ -1084,6 +1680,7 @@ impl eframe::App for WinCraftApp {
                 Page::ServicesNssm,
                 Page::StartupAndRegistry,
                 Page::DoctorAndHelp,
+                Page::DiskTreemap,
             ] {
                 if ui.selectable_label(self.page == p, p.label()).clicked() {
                     self.page = p;
@@ -1357,7 +1954,7 @@ impl eframe::App for WinCraftApp {
                 }
             }
             Page::DoctorAndHelp => {
-                ui.heading("Toolchain Doctor, Brochure Assets & 28 MCP Tools Catalog");
+                ui.heading("Toolchain Doctor, Brochure Assets & 31 MCP Tools Catalog");
                 ui.horizontal_wrapped(|ui| {
                     if ui.button("🩺 Re-run Doctor").clicked() {
                         self.doctor_json = self.exec(&Command::Doctor).ok();
@@ -1377,6 +1974,10 @@ impl eframe::App for WinCraftApp {
                 });
                 let tools_val = json!({ "tools": tools_catalog() });
                 self.render_dataset_controls_and_body(ui, "tools", &tools_val);
+            }
+            Page::DiskTreemap => {
+                let ctx = ui.ctx().clone();
+                self.render_treemap_page(ui, &ctx);
             }
         });
     }

@@ -7,7 +7,7 @@
 
 Pure-Rust Windows host, RAM Weeder, Restart Manager file-lock inspector, high-speed FileOps, and NSSM-safe SysAdmin studio (`v0.1.0`).
 
-Subsumes `windows-operations-mcp`, `system-admin-mcp` (RAM Weeder), `sysinternals-mcp`, `filesystem-mcp`, `winrar-mcp`, and the retired Python `filecraft` scaffold into one zero-tax ArtCraft 3-tier workspace (`wincraft-core`, `wincraft-mcp`, `wincraft-app`).
+Subsumes `windows-operations-mcp`, `system-admin-mcp` (RAM Weeder), `sysinternals-mcp`, `filesystem-mcp`, `winrar-mcp`, the retired Python `filecraft` scaffold, and the vendored WizTree NTFS MFT engine (`wiztree`) for sub-second search and hierarchical enveloping cushion treemaps into one zero-tax ArtCraft 3-tier workspace (`wincraft-core`, `wincraft-mcp`, `wincraft-app`).
 
 ## Install
 
@@ -52,11 +52,12 @@ Every collection output in both the L3 `wincraft-app` desktop UI and the L2 `win
 - **Pagination:** Configurable page size (`10`, `25`, `50`, `100` in UI; `--page <N> --page-size <N>` in CLI) with `<< First`, `< Prev`, `Page X / Y`, `Next >`, `Last >>`.
 - **Export (`CSV`, `MD`, `TXT`, `JSON`):** One-click export buttons in `wincraft-app` (`exports/<dataset>_<timestamp>.<ext>`) and `--export <path>` on any CLI verb.
 
-## 28 MCP Tools (`wincraft mcp` on stdio)
+## 31 MCP Tools (`wincraft mcp` on stdio)
 
 | Domain | Tools |
 |---|---|
 | **System & Diagnostics** | `win_status`, `win_doctor`, `win_disk_list`, `win_env_audit`, `win_cpu_audit`, `win_thermal_status` |
+| **MFT Storage & Treemaps** | `win_mft_search` (sub-second NTFS MFT wildcard lookup), `win_disk_usage` (fast space & extension summary), `win_treemap` (hierarchical cushion HTML) |
 | **Processes & Ports** | `win_proc_list`, `win_port_map` (correlated with `WEBAPP_PORTS.md`) |
 | **RAM Weeder** | `win_weeder_scan`, `win_weeder_reap` (`confirm=true`, protected system allowlist) |
 | **File-Lock Inspector** | `win_lock_inspect` (native Win32 Restart Manager `rstrtmgr.dll` FFI) |
@@ -67,12 +68,13 @@ Every collection output in both the L3 `wincraft-app` desktop UI and the L2 `win
 
 | Area | Status | Notes |
 |---|---|---|
-| CLI (`wincraft` 28 verbs, Cards/List/JSON, filter/sort/page/export) | Implemented | `cargo run -p wincraft-mcp --bin wincraft -- --help` |
-| MCP stdio (`wincraft mcp`, 28 tools) | Implemented | `initialize` to `tools/list` to `tools/call`, stdout pure JSON-RPC |
-| L3 egui 9-page workstation | Implemented | Cards default, List/JSON, filter/sort/page/export, brochure buttons |
+| CLI (`wincraft` 31 verbs, Cards/List/JSON, filter/sort/page/export) | Implemented | `cargo run -p wincraft-mcp --bin wincraft -- --help` |
+| MCP stdio (`wincraft mcp`, 31 tools) | Implemented | `initialize` to `tools/list` to `tools/call`, stdout pure JSON-RPC |
+| L3 egui 10-page workstation | Implemented | Cards default, List/JSON, filter/sort/page/export, MFT Treemap (Page 10) with Relaunch as Admin |
 | CPU audit + thermals | Implemented | v0.2.0: `win_cpu_audit`, `win_thermal_status`, Page 3 |
+| MFT Treemap & Fast Search | Implemented | Sub-second MFT search, hierarchical enveloping cushion treemap with breadcrumb drill-down |
 | FileOps LF writes + `.bak` | Implemented | `fs_backup_write` LF-normalized, mandatory `.bak` |
-| Light theme contrast + Ctrl+wheel zoom | Planned | Dark theme today; tracked for T2 polish |
+| Light theme contrast + Ctrl+wheel zoom | Implemented | Vector Sun/Moon toggle, Ctrl+Wheel zoom factor clamp (0.6x to 2.5x) |
 | NSIS installer + portable exes | Partial | `scripts/release.ps1` stages `dist/`; no tag published yet |
 
 ## Safety Invariants
