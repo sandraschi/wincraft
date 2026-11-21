@@ -11,6 +11,8 @@ serde_json = { workspace = true }
 chrono = { workspace = true }
 uuid = { workspace = true }
 zip = { workspace = true }
+csv = { workspace = true }
+windows-sys = { workspace = true }
 
 [dev-dependencies]
 tempfile = { workspace = true }
