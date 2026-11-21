@@ -22,9 +22,9 @@ Installs the Windows app and the CLI (Start Menu shortcut, CLI on the user PATH)
 ## Technical Brochure & Operator Handbook (`docs/brochure/`)
 
 WinCraft ships a BookCraft-compiled brochure suite in [`docs/brochure/`](docs/brochure/) following `mcp-central-docs/standards/CRAFT_BROCHURE_STANDARD.md`:
-- [`docs/brochure/wincraft-brochure.pdf`](docs/brochure/wincraft-brochure.pdf) — Print-ready A4 PDF brochure with vector architecture SVG, subsystem cards, and full 26-tool matrix.
-- [`docs/brochure/wincraft-brochure.epub`](docs/brochure/wincraft-brochure.epub) — Reflowable EPUB e-book edition compiled via `bookcraft-cli convert --to epub`.
-- [`docs/brochure/wincraft-brochure.html`](docs/brochure/wincraft-brochure.html) — Canonical HTML5 + inline SVG source (also launchable from the `📖 PDF Brochure` / `📚 EPUB Brochure` buttons in `wincraft-app`).
+- [`docs/brochure/wincraft-brochure.pdf`](docs/brochure/wincraft-brochure.pdf) -- Print-ready A4 PDF brochure with vector architecture SVG, subsystem cards, and full 26-tool matrix.
+- [`docs/brochure/wincraft-brochure.epub`](docs/brochure/wincraft-brochure.epub) -- Reflowable EPUB e-book edition compiled via `bookcraft-cli convert --to epub`.
+- [`docs/brochure/wincraft-brochure.html`](docs/brochure/wincraft-brochure.html) -- Canonical HTML5 + inline SVG source (also launchable from the `File -> Open Brochures` menu in `wincraft-app`).
 
 ## Quick Start
 
@@ -70,7 +70,7 @@ Every collection output in both the L3 `wincraft-app` desktop UI and the L2 `win
 |---|---|---|
 | CLI (`wincraft` 31 verbs, Cards/List/JSON, filter/sort/page/export) | Implemented | `cargo run -p wincraft-mcp --bin wincraft -- --help` |
 | MCP stdio (`wincraft mcp`, 31 tools) | Implemented | `initialize` to `tools/list` to `tools/call`, stdout pure JSON-RPC |
-| L3 egui 10-page workstation | Implemented | Cards default, List/JSON, filter/sort/page/export, MFT Treemap (Page 10) with Relaunch as Admin |
+| L3 egui 10-page workstation | Implemented | Craft standard top menu bar (`File`, `Edit`, `View`, `Commands`, `Window`, `Help`), Command Palette (`Ctrl+K`), Cards default, List/JSON, MFT Treemap (Page 10) with Relaunch as Admin |
 | CPU audit + thermals | Implemented | v0.2.0: `win_cpu_audit`, `win_thermal_status`, Page 3 |
 | MFT Treemap & Fast Search | Implemented | Sub-second MFT search, hierarchical enveloping cushion treemap with breadcrumb drill-down |
 | FileOps LF writes + `.bak` | Implemented | `fs_backup_write` LF-normalized, mandatory `.bak` |
@@ -85,6 +85,6 @@ Every collection output in both the L3 `wincraft-app` desktop UI and the L2 `win
 4. **Protected Process Allowlist:** `weeder_reap` refuses to terminate system/host processes (`csrss.exe`, `lsass.exe`, `svchost.exe`, `explorer.exe`, `nssm.exe`, `pwsh.exe`, `code.exe`, `claude.exe`).
 5. **NSSM Service Rule:** `svc_control` inspects `sc.exe qc` for NSSM wrappers and always uses `sc.exe stop`/`sc.exe start` rather than killing child processes.
 
-## Lineage — the Storytold craft-app pattern
+## Lineage -- the Storytold craft-app pattern
 
-Storytold ArtCraft ([storytold/artcraft](https://github.com/storytold/artcraft) — "the IDE for artists") was the starting point. The 16 craft apps in the Storytold stable each ship one binary that is both the human CLI and the agent MCP server (stdio), headless-first, with deterministic JSON output and an in-process native GUI. That modus operandi and harness is what this repo implements; the code here is independent, the pattern is shared.
+Storytold ArtCraft ([storytold/artcraft](https://github.com/storytold/artcraft) -- "the IDE for artists") was the starting point. The 16 craft apps in the Storytold stable each ship one binary that is both the human CLI and the agent MCP server (stdio), headless-first, with deterministic JSON output and an in-process native GUI. That modus operandi and harness is what this repo implements; the code here is independent, the pattern is shared.

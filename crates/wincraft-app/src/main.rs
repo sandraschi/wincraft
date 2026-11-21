@@ -49,6 +49,17 @@ fn format_bytes(bytes: u64) -> String {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum StudioDialog {
+    CommandPalette,
+    Shortcuts,
+    Docs,
+    Licenses,
+    About,
+    Safety,
+    Preferences,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Page {
     Dashboard,
     ProcsAndPorts,
@@ -63,6 +74,21 @@ enum Page {
 }
 
 impl Page {
+    pub const fn all() -> [Page; 10] {
+        [
+            Page::Dashboard,
+            Page::ProcsAndPorts,
+            Page::CpuAuditAndThermals,
+            Page::RamWeeder,
+            Page::FileOps,
+            Page::LockInspector,
+            Page::ServicesNssm,
+            Page::StartupAndRegistry,
+            Page::DoctorAndHelp,
+            Page::DiskTreemap,
+        ]
+    }
+
     fn label(self) -> &'static str {
         match self {
             Page::Dashboard => "🖴 1. Host & Disks",
@@ -76,6 +102,89 @@ impl Page {
             Page::DoctorAndHelp => "🩺 9. Doctor, Tools & Brochure",
             Page::DiskTreemap => "🗺 10. MFT Cushion Treemap",
         }
+    }
+}
+
+pub static MENU_CATALOG: &[(&str, &str, &str)] = &[
+    // File
+    ("file_scan_mft", "Scan MFT Drive...", "Ctrl+M"),
+    ("file_export_csv", "Export Current View (CSV)", "Ctrl+E"),
+    ("file_export_md", "Export Current View (Markdown)", ""),
+    ("file_export_txt", "Export Current View (Text)", ""),
+    ("file_export_json", "Export Current View (JSON)", ""),
+    ("file_open_backups", "Open Backups Folder", ""),
+    ("file_pdf_brochure", "Open PDF Brochure", ""),
+    ("file_epub_brochure", "Open EPUB Brochure", ""),
+    ("file_html_brochure", "Open HTML Brochure", ""),
+    ("file_relaunch_admin", "Relaunch as Admin (UAC)", ""),
+    ("file_quit", "Quit", "Ctrl+Q"),
+    // Edit
+    ("edit_filter", "Filter Table / Cards...", "Ctrl+F"),
+    ("edit_clear_filter", "Clear Filters", "Esc"),
+    ("edit_toggle_readonly", "Toggle Read-Only Guard", ""),
+    ("edit_toggle_confirm", "Toggle Arm Confirm Gate", ""),
+    ("edit_preferences", "Preferences...", "Ctrl+,"),
+    // View
+    ("view_mode_cards", "View: Cards (Default)", ""),
+    ("view_mode_table", "View: List / Table", ""),
+    ("view_mode_json", "View: Raw JSON", ""),
+    ("view_page_1", "1. Host & Disks", ""),
+    ("view_page_2", "2. Processes & Ports", ""),
+    ("view_page_3", "3. CPU Audit & Thermals", ""),
+    ("view_page_4", "4. RAM Weeder", ""),
+    ("view_page_5", "5. High-Speed FileOps", ""),
+    ("view_page_6", "6. Lock Inspector", ""),
+    ("view_page_7", "7. Services & NSSM", ""),
+    ("view_page_8", "8. Startup & Registry", ""),
+    ("view_page_9", "9. Doctor & Tools", ""),
+    ("view_page_10", "10. MFT Cushion Treemap", ""),
+    ("view_zoom_in", "Zoom In", "Ctrl+="),
+    ("view_zoom_out", "Zoom Out", "Ctrl+-"),
+    ("view_zoom_reset", "Reset Zoom (100%)", "Ctrl+1"),
+    ("view_theme_dark", "Theme: Dark (Slate-950)", ""),
+    ("view_theme_light", "Theme: Light", ""),
+    // Commands / SysAdmin
+    ("cmd_refresh_telemetry", "Refresh Telemetry & Metrics", "F5"),
+    ("cmd_scan_procs", "Scan Running Processes", ""),
+    ("cmd_scan_ports", "Scan Active Listening Ports", ""),
+    ("cmd_scan_weeder", "Scan RAM Working Sets", ""),
+    ("cmd_run_cpu_audit", "Run CPU Thermals & Audit", ""),
+    ("cmd_run_doctor", "Verify Restart Manager Doctor", ""),
+    ("cmd_scan_mft", "Scan Drive MFT Records", ""),
+    (
+        "cmd_treemap_browser",
+        "Open Interactive D3 Treemap in Browser",
+        "",
+    ),
+    // Window
+    ("win_reset_layout", "Reset Panel Layout", ""),
+    ("win_toggle_kpi", "Toggle Host KPI Ribbon", ""),
+    ("win_toggle_safety", "Safety & Invariants Info...", ""),
+    // Help
+    ("help_palette", "Command Palette...", "Ctrl+K"),
+    ("help_shortcuts", "Keyboard Shortcuts...", "F1"),
+    ("help_getting_started", "Getting Started...", ""),
+    ("help_usage", "Usage (GUI, CLI & MCP)...", ""),
+    ("help_tips", "Tips & Tricks...", ""),
+    ("help_pitfalls", "Common Pitfalls & Safety...", ""),
+    ("help_planned", "Planned Extensions...", ""),
+    ("help_catalog", "31 MCP Tools Reference...", ""),
+    ("help_docs", "Project Files & Docs...", ""),
+    ("help_licenses", "Licenses & Notices...", ""),
+    ("help_about", "About WinCraft", ""),
+];
+
+fn switch_on_hover(ctx: &egui::Context, titles: &[egui::Response]) {
+    let is_open =
+        |t: &egui::Response| egui::Popup::is_id_open(ctx, egui::Popup::default_response_id(t));
+    if !titles.iter().any(is_open) {
+        return;
+    }
+    if let Some(title) = titles
+        .iter()
+        .find(|t| t.hovered() && !t.clicked() && !is_open(t))
+    {
+        egui::Popup::open_id(ctx, egui::Popup::default_response_id(title));
     }
 }
 
@@ -128,12 +237,16 @@ pub struct WinCraftApp {
     svc_filter: String,
     reg_key: String,
     last_message: String,
-    show_help_modal: bool,
     dark_mode: bool,
     treemap_drive: String,
     treemap_summary: Option<DiskUsageSummary>,
     treemap_zoom_path: Option<String>,
     treemap_selected_tile: Option<TreemapTile>,
+    active_dialog: Option<StudioDialog>,
+    palette_query: String,
+    docs_tab: &'static str,
+    show_kpi_ribbon: bool,
+    quit_requested: bool,
 }
 
 impl Default for WinCraftApp {
@@ -187,14 +300,18 @@ impl Default for WinCraftApp {
             svc_filter: String::new(),
             reg_key: r"HKCU\Environment".to_string(),
             last_message:
-                "Ready — Cards view active (switchable to List/JSON, sortable, filterable, paginated, exportable)."
+                "Ready -- Cards view active (switchable to List/JSON, sortable, filterable, paginated, exportable)."
                     .to_string(),
-            show_help_modal: false,
             dark_mode: true,
             treemap_drive: "C:\\".to_string(),
             treemap_summary: None,
             treemap_zoom_path: None,
             treemap_selected_tile: None,
+            active_dialog: None,
+            palette_query: String::new(),
+            docs_tab: "start",
+            show_kpi_ribbon: true,
+            quit_requested: false,
         }
     }
 }
@@ -356,6 +473,985 @@ impl WinCraftApp {
             Err(e) => {
                 self.last_message = format!("Failed to open {}: {e}", path.display());
             }
+        }
+    }
+
+    fn menu_item(&mut self, ui: &mut egui::Ui, id: &str, label: &str) {
+        if ui.button(label).clicked() {
+            match self.menu_action(id) {
+                Ok(_) => {}
+                Err(e) => self.last_message = e,
+            }
+            ui.close();
+        }
+    }
+
+    pub fn menu_action(&mut self, id: &str) -> Result<Value, String> {
+        match id {
+            "file_scan_mft" => {
+                let drive = self.treemap_drive.clone();
+                self.page = Page::DiskTreemap;
+                match wiztree::scan_drive_usage(&drive, 5000) {
+                    Ok(records) => {
+                        let summary = wiztree::analyze_disk_records(&drive, &records, 50);
+                        self.last_message = format!(
+                            "MFT scan complete for {drive}: {} files ({:.2} GB)",
+                            summary.total_files,
+                            summary.total_size_bytes as f64 / 1_073_741_824.0
+                        );
+                        self.treemap_summary = Some(summary);
+                        self.treemap_zoom_path = None;
+                        self.treemap_selected_tile = None;
+                        Ok(json!({ "scanned_drive": drive }))
+                    }
+                    Err(e) => {
+                        let err = format!("MFT scan failed for {drive}: {e}");
+                        self.last_message = err.clone();
+                        Err(err)
+                    }
+                }
+            }
+            "file_export_csv" => {
+                self.export_current_view(OutputFormat::Csv);
+                Ok(json!({ "exported": "csv" }))
+            }
+            "file_export_md" => {
+                self.export_current_view(OutputFormat::Md);
+                Ok(json!({ "exported": "md" }))
+            }
+            "file_export_txt" => {
+                self.export_current_view(OutputFormat::Txt);
+                Ok(json!({ "exported": "txt" }))
+            }
+            "file_export_json" => {
+                self.export_current_view(OutputFormat::Json);
+                Ok(json!({ "exported": "json" }))
+            }
+            "file_open_backups" => {
+                let _ = std::fs::create_dir_all(&self.export_dir);
+                let dir = self.export_dir.clone();
+                self.open_external_file(&dir);
+                Ok(json!({ "opened": dir.display().to_string() }))
+            }
+            "file_pdf_brochure" => {
+                let p = self.brochure_dir.join("wincraft-brochure.pdf");
+                self.open_external_file(&p);
+                Ok(json!({ "brochure": "pdf" }))
+            }
+            "file_epub_brochure" => {
+                let p = self.brochure_dir.join("wincraft-brochure.epub");
+                self.open_external_file(&p);
+                Ok(json!({ "brochure": "epub" }))
+            }
+            "file_html_brochure" => {
+                let p = self.brochure_dir.join("wincraft-brochure.html");
+                self.open_external_file(&p);
+                Ok(json!({ "brochure": "html" }))
+            }
+            "file_relaunch_admin" => {
+                if let Ok(exe) = std::env::current_exe() {
+                    let _ = ProcessCommand::new("powershell")
+                        .args([
+                            "-Command",
+                            &format!("Start-Process '{}' -Verb RunAs", exe.display()),
+                        ])
+                        .spawn();
+                    self.quit_requested = true;
+                    Ok(json!({ "relaunch_admin": true }))
+                } else {
+                    Err("Failed to determine current executable path".to_string())
+                }
+            }
+            "file_quit" => {
+                self.quit_requested = true;
+                Ok(json!({ "quit": true }))
+            }
+            "edit_filter" => {
+                self.last_message = "Filter active. Type query in search field.".to_string();
+                Ok(json!({ "filter": true }))
+            }
+            "edit_clear_filter" => {
+                self.table_filter.clear();
+                self.page_num = 1;
+                Ok(json!({ "clear_filter": true }))
+            }
+            "edit_toggle_readonly" => {
+                self.opts.read_only = !self.opts.read_only;
+                self.last_message = format!(
+                    "Read-Only Guard: {}",
+                    if self.opts.read_only {
+                        "ACTIVE"
+                    } else {
+                        "INACTIVE"
+                    }
+                );
+                Ok(json!({ "read_only": self.opts.read_only }))
+            }
+            "edit_toggle_confirm" => {
+                self.arm_confirm = !self.arm_confirm;
+                self.last_message = format!(
+                    "Arm Confirm Gate: {}",
+                    if self.arm_confirm {
+                        "ARMED"
+                    } else {
+                        "DISARMED"
+                    }
+                );
+                Ok(json!({ "arm_confirm": self.arm_confirm }))
+            }
+            "edit_preferences" => {
+                self.active_dialog = Some(StudioDialog::Preferences);
+                Ok(json!({ "dialog": "preferences" }))
+            }
+            "view_mode_cards" => {
+                self.view_mode = OutputFormat::Cards;
+                Ok(json!({ "view_mode": "cards" }))
+            }
+            "view_mode_table" => {
+                self.view_mode = OutputFormat::List;
+                Ok(json!({ "view_mode": "table" }))
+            }
+            "view_mode_json" => {
+                self.view_mode = OutputFormat::Json;
+                Ok(json!({ "view_mode": "json" }))
+            }
+            "view_page_1" => {
+                self.page = Page::Dashboard;
+                self.page_num = 1;
+                self.sort_col = 0;
+                Ok(json!({ "page": 1 }))
+            }
+            "view_page_2" => {
+                self.page = Page::ProcsAndPorts;
+                self.page_num = 1;
+                self.sort_col = 0;
+                Ok(json!({ "page": 2 }))
+            }
+            "view_page_3" => {
+                self.page = Page::CpuAuditAndThermals;
+                self.page_num = 1;
+                self.sort_col = 0;
+                Ok(json!({ "page": 3 }))
+            }
+            "view_page_4" => {
+                self.page = Page::RamWeeder;
+                self.page_num = 1;
+                self.sort_col = 0;
+                Ok(json!({ "page": 4 }))
+            }
+            "view_page_5" => {
+                self.page = Page::FileOps;
+                self.page_num = 1;
+                self.sort_col = 0;
+                Ok(json!({ "page": 5 }))
+            }
+            "view_page_6" => {
+                self.page = Page::LockInspector;
+                self.page_num = 1;
+                self.sort_col = 0;
+                Ok(json!({ "page": 6 }))
+            }
+            "view_page_7" => {
+                self.page = Page::ServicesNssm;
+                self.page_num = 1;
+                self.sort_col = 0;
+                Ok(json!({ "page": 7 }))
+            }
+            "view_page_8" => {
+                self.page = Page::StartupAndRegistry;
+                self.page_num = 1;
+                self.sort_col = 0;
+                Ok(json!({ "page": 8 }))
+            }
+            "view_page_9" => {
+                self.page = Page::DoctorAndHelp;
+                self.page_num = 1;
+                self.sort_col = 0;
+                Ok(json!({ "page": 9 }))
+            }
+            "view_page_10" => {
+                self.page = Page::DiskTreemap;
+                self.page_num = 1;
+                self.sort_col = 0;
+                Ok(json!({ "page": 10 }))
+            }
+            "view_zoom_in" => Ok(json!({ "zoom": "in" })),
+            "view_zoom_out" => Ok(json!({ "zoom": "out" })),
+            "view_zoom_reset" => Ok(json!({ "zoom": "reset" })),
+            "view_theme_dark" => {
+                self.dark_mode = true;
+                Ok(json!({ "dark_mode": true }))
+            }
+            "view_theme_light" => {
+                self.dark_mode = false;
+                Ok(json!({ "dark_mode": false }))
+            }
+            "cmd_refresh_telemetry" => {
+                self.status_json = self.exec(&Command::Status).ok();
+                self.weeder_json = self.exec(&Command::WeederScan).ok();
+                self.last_message = "Telemetry & RAM weeder metrics refreshed.".to_string();
+                Ok(json!({ "telemetry": "refreshed" }))
+            }
+            "cmd_scan_procs" => {
+                let filter = if self.proc_filter.trim().is_empty() {
+                    None
+                } else {
+                    Some(self.proc_filter.trim().to_string())
+                };
+                self.procs_json = self.exec(&Command::ProcList { filter, limit: 250 }).ok();
+                self.page = Page::ProcsAndPorts;
+                Ok(json!({ "scan": "procs" }))
+            }
+            "cmd_scan_ports" => {
+                let port = self.port_filter.trim().parse::<u16>().ok();
+                self.ports_json = self
+                    .exec(&Command::PortMap {
+                        port,
+                        listening_only: true,
+                    })
+                    .ok();
+                self.page = Page::ProcsAndPorts;
+                Ok(json!({ "scan": "ports" }))
+            }
+            "cmd_scan_weeder" => {
+                self.weeder_json = self.exec(&Command::WeederScan).ok();
+                self.page = Page::RamWeeder;
+                Ok(json!({ "scan": "weeder" }))
+            }
+            "cmd_run_cpu_audit" => {
+                let filter = if self.cpu_filter.trim().is_empty() {
+                    None
+                } else {
+                    Some(self.cpu_filter.trim().to_string())
+                };
+                self.cpu_audit_json = self
+                    .exec(&Command::CpuAudit {
+                        filter,
+                        min_cpu_seconds: Some(self.min_cpu_sec),
+                        min_cpu_percent: Some(self.min_cpu_pct),
+                    })
+                    .ok();
+                self.thermal_json = self.exec(&Command::ThermalStatus).ok();
+                self.page = Page::CpuAuditAndThermals;
+                Ok(json!({ "scan": "cpu_audit" }))
+            }
+            "cmd_run_doctor" => {
+                self.doctor_json = self.exec(&Command::Doctor).ok();
+                self.page = Page::DoctorAndHelp;
+                Ok(json!({ "scan": "doctor" }))
+            }
+            "cmd_scan_mft" => self.menu_action("file_scan_mft"),
+            "cmd_treemap_browser" => {
+                if let Some(summary) = &self.treemap_summary {
+                    let html =
+                        wiztree::generate_treemap_html(&summary.path, &summary.largest_files);
+                    let temp_p = std::env::temp_dir().join("wincraft_treemap.html");
+                    let _ = std::fs::write(&temp_p, html);
+                    let _ = ProcessCommand::new("cmd")
+                        .args(["/c", "start", "", &temp_p.to_string_lossy()])
+                        .spawn();
+                    self.last_message =
+                        format!("Opened D3 treemap in browser: {}", temp_p.display());
+                    Ok(json!({ "treemap_browser": temp_p.display().to_string() }))
+                } else {
+                    let err = "Scan a drive first before opening treemap in browser.".to_string();
+                    self.last_message = err.clone();
+                    Err(err)
+                }
+            }
+            "win_reset_layout" => {
+                self.show_kpi_ribbon = true;
+                self.view_mode = OutputFormat::Cards;
+                self.page_num = 1;
+                self.sort_col = 0;
+                self.last_message = "Layout reset to defaults.".to_string();
+                Ok(json!({ "layout": "reset" }))
+            }
+            "win_toggle_kpi" => {
+                self.show_kpi_ribbon = !self.show_kpi_ribbon;
+                Ok(json!({ "show_kpi": self.show_kpi_ribbon }))
+            }
+            "win_toggle_safety" => {
+                self.active_dialog = Some(StudioDialog::Safety);
+                Ok(json!({ "dialog": "safety" }))
+            }
+            "help_palette" => {
+                self.active_dialog = Some(StudioDialog::CommandPalette);
+                Ok(json!({ "dialog": "palette" }))
+            }
+            "help_shortcuts" => {
+                self.active_dialog = Some(StudioDialog::Shortcuts);
+                Ok(json!({ "dialog": "shortcuts" }))
+            }
+            "help_getting_started" => {
+                self.docs_tab = "start";
+                self.active_dialog = Some(StudioDialog::Docs);
+                Ok(json!({ "dialog": "docs", "tab": "start" }))
+            }
+            "help_usage" => {
+                self.docs_tab = "usage";
+                self.active_dialog = Some(StudioDialog::Docs);
+                Ok(json!({ "dialog": "docs", "tab": "usage" }))
+            }
+            "help_tips" => {
+                self.docs_tab = "tips";
+                self.active_dialog = Some(StudioDialog::Docs);
+                Ok(json!({ "dialog": "docs", "tab": "tips" }))
+            }
+            "help_pitfalls" => {
+                self.docs_tab = "pitfalls";
+                self.active_dialog = Some(StudioDialog::Docs);
+                Ok(json!({ "dialog": "docs", "tab": "pitfalls" }))
+            }
+            "help_planned" => {
+                self.docs_tab = "planned";
+                self.active_dialog = Some(StudioDialog::Docs);
+                Ok(json!({ "dialog": "docs", "tab": "planned" }))
+            }
+            "help_catalog" => {
+                self.docs_tab = "catalog";
+                self.active_dialog = Some(StudioDialog::Docs);
+                Ok(json!({ "dialog": "docs", "tab": "catalog" }))
+            }
+            "help_docs" => {
+                self.docs_tab = "start";
+                self.active_dialog = Some(StudioDialog::Docs);
+                Ok(json!({ "dialog": "docs" }))
+            }
+            "help_licenses" => {
+                self.active_dialog = Some(StudioDialog::Licenses);
+                Ok(json!({ "dialog": "licenses" }))
+            }
+            "help_about" => {
+                self.active_dialog = Some(StudioDialog::About);
+                Ok(json!({ "dialog": "about" }))
+            }
+            other => Err(format!("unknown menu action '{other}'")),
+        }
+    }
+
+    fn export_current_view(&mut self, fmt: OutputFormat) {
+        let (dataset_slug, payload_opt) = match self.page {
+            Page::Dashboard => (
+                "disks",
+                self.status_json
+                    .as_ref()
+                    .and_then(|st| st.get("disks"))
+                    .cloned(),
+            ),
+            Page::ProcsAndPorts => (
+                "ports",
+                self.ports_json
+                    .as_ref()
+                    .or(self.procs_json.as_ref())
+                    .cloned(),
+            ),
+            Page::CpuAuditAndThermals => ("cpu_audit", self.cpu_audit_json.as_ref().cloned()),
+            Page::RamWeeder => ("weeder", self.weeder_json.as_ref().cloned()),
+            Page::FileOps => ("fileops", self.fileops_json.as_ref().cloned()),
+            Page::LockInspector => ("locks", self.lock_json.as_ref().cloned()),
+            Page::ServicesNssm => ("services", self.services_json.as_ref().cloned()),
+            Page::StartupAndRegistry => (
+                "startup",
+                self.startup_json
+                    .as_ref()
+                    .or(self.reg_json.as_ref())
+                    .cloned(),
+            ),
+            Page::DoctorAndHelp => ("tools", Some(json!({ "tools": tools_catalog() }))),
+            Page::DiskTreemap => ("treemap", None),
+        };
+
+        let Some(payload) = payload_opt else {
+            self.last_message =
+                "No active tabular dataset on current workspace to export.".to_string();
+            return;
+        };
+
+        let tab = payload_to_tabular(&payload);
+
+        let ext = fmt.extension();
+        let _ = std::fs::create_dir_all(&self.export_dir);
+        let epoch = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map(|d| d.as_secs())
+            .unwrap_or(0);
+        let file_path = self
+            .export_dir
+            .join(format!("{dataset_slug}_{epoch}.{ext}"));
+        let total_cap = tab.rows.len().max(1);
+        let (all_filtered, _, _) = filter_sort_paginate(
+            tab.clone(),
+            Some(self.table_filter.as_str()),
+            Some(self.sort_col),
+            self.sort_asc,
+            1,
+            total_cap,
+        );
+        let body = render_tabular(&all_filtered, &payload, fmt);
+        match std::fs::write(&file_path, body) {
+            Ok(()) => {
+                self.last_message = format!(
+                    "Exported {} rows ({:?}) -> {}",
+                    all_filtered.rows.len(),
+                    fmt,
+                    file_path.display()
+                );
+            }
+            Err(e) => {
+                self.last_message = format!("Export failed ({}): {e}", file_path.display());
+            }
+        }
+    }
+
+    fn render_menu_bar(&mut self, ui: &mut egui::Ui) {
+        egui::Panel::top("top_menubar").show(ui, |ui| {
+            egui::MenuBar::new().ui(ui, |ui| {
+                let file = ui
+                    .menu_button("File", |ui| {
+                        self.menu_item(ui, "file_scan_mft", "Scan MFT Drive... (Ctrl+M)");
+                        ui.separator();
+                        self.menu_item(ui, "file_export_csv", "Export View as CSV... (Ctrl+E)");
+                        self.menu_item(ui, "file_export_md", "Export View as Markdown...");
+                        self.menu_item(ui, "file_export_txt", "Export View as Text...");
+                        self.menu_item(ui, "file_export_json", "Export View as JSON...");
+                        ui.separator();
+                        self.menu_item(ui, "file_open_backups", "Open Backups Folder");
+                        ui.menu_button("Open Brochures", |ui| {
+                            self.menu_item(ui, "file_pdf_brochure", "PDF Brochure");
+                            self.menu_item(ui, "file_epub_brochure", "EPUB Brochure");
+                            self.menu_item(ui, "file_html_brochure", "HTML5 Brochure");
+                        });
+                        ui.separator();
+                        self.menu_item(ui, "file_relaunch_admin", "Relaunch as Admin (UAC)");
+                        ui.separator();
+                        self.menu_item(ui, "file_quit", "Quit (Ctrl+Q)");
+                    })
+                    .response;
+
+                let edit = ui
+                    .menu_button("Edit", |ui| {
+                        self.menu_item(ui, "edit_filter", "Filter Table / Cards... (Ctrl+F)");
+                        self.menu_item(ui, "edit_clear_filter", "Clear Filters (Esc)");
+                        ui.separator();
+                        let ro_label = if self.opts.read_only {
+                            "Read-Only Guard: [Active]"
+                        } else {
+                            "Read-Only Guard: [Inactive]"
+                        };
+                        self.menu_item(ui, "edit_toggle_readonly", ro_label);
+                        let arm_label = if self.arm_confirm {
+                            "Arm Confirm Gate: [ARMED]"
+                        } else {
+                            "Arm Confirm Gate: [Disarmed]"
+                        };
+                        self.menu_item(ui, "edit_toggle_confirm", arm_label);
+                        ui.separator();
+                        self.menu_item(ui, "edit_preferences", "Preferences... (Ctrl+,)");
+                    })
+                    .response;
+
+                let view = ui
+                    .menu_button("View", |ui| {
+                        ui.menu_button("View Mode", |ui| {
+                            self.menu_item(ui, "view_mode_cards", "🗂 Cards (Default)");
+                            self.menu_item(ui, "view_mode_table", "☰ List / Table");
+                            self.menu_item(ui, "view_mode_json", "{ } Raw JSON");
+                        });
+                        ui.separator();
+                        ui.menu_button("Workspaces", |ui| {
+                            self.menu_item(ui, "view_page_1", "1. Host & Disks");
+                            self.menu_item(ui, "view_page_2", "2. Processes & Ports");
+                            self.menu_item(ui, "view_page_3", "3. CPU Audit & Thermals");
+                            self.menu_item(ui, "view_page_4", "4. RAM Weeder");
+                            self.menu_item(ui, "view_page_5", "5. High-Speed FileOps");
+                            self.menu_item(ui, "view_page_6", "6. Lock Inspector");
+                            self.menu_item(ui, "view_page_7", "7. Services & NSSM");
+                            self.menu_item(ui, "view_page_8", "8. Startup & Registry");
+                            self.menu_item(ui, "view_page_9", "9. Doctor & Catalog");
+                            self.menu_item(ui, "view_page_10", "10. MFT Cushion Treemap");
+                        });
+                        ui.separator();
+                        self.menu_item(ui, "view_zoom_in", "Zoom In (Ctrl+=)");
+                        self.menu_item(ui, "view_zoom_out", "Zoom Out (Ctrl+-)");
+                        self.menu_item(ui, "view_zoom_reset", "Reset Zoom (100%) (Ctrl+1)");
+                        ui.separator();
+                        self.menu_item(ui, "view_theme_dark", "Theme: Dark (Slate-950)");
+                        self.menu_item(ui, "view_theme_light", "Theme: Light");
+                    })
+                    .response;
+
+                let commands = ui
+                    .menu_button("Commands", |ui| {
+                        self.menu_item(
+                            ui,
+                            "cmd_refresh_telemetry",
+                            "Refresh Telemetry & Metrics (F5)",
+                        );
+                        self.menu_item(ui, "cmd_scan_procs", "Scan Running Processes");
+                        self.menu_item(ui, "cmd_scan_ports", "Scan Active Listening Ports");
+                        self.menu_item(ui, "cmd_scan_weeder", "Scan RAM Working Sets");
+                        self.menu_item(ui, "cmd_run_cpu_audit", "Run CPU Thermals & Audit");
+                        self.menu_item(ui, "cmd_run_doctor", "Verify Restart Manager Doctor");
+                        ui.separator();
+                        self.menu_item(ui, "cmd_scan_mft", "Scan Drive MFT Records");
+                        self.menu_item(ui, "cmd_treemap_browser", "Open Treemap in Browser");
+                    })
+                    .response;
+
+                let window = ui
+                    .menu_button("Window", |ui| {
+                        self.menu_item(ui, "win_reset_layout", "Reset Panel Layout");
+                        ui.separator();
+                        self.menu_item(ui, "win_toggle_kpi", "Toggle Host KPI Ribbon");
+                        self.menu_item(ui, "win_toggle_safety", "Safety & Invariants Info...");
+                    })
+                    .response;
+
+                let help = ui
+                    .menu_button("Help", |ui| {
+                        self.menu_item(ui, "help_palette", "Command Palette... (Ctrl+K)");
+                        self.menu_item(ui, "help_shortcuts", "Keyboard Shortcuts... (F1)");
+                        ui.separator();
+                        self.menu_item(ui, "help_getting_started", "Getting Started...");
+                        self.menu_item(ui, "help_usage", "Usage (GUI, CLI & MCP)...");
+                        self.menu_item(ui, "help_tips", "Tips & Tricks...");
+                        self.menu_item(ui, "help_pitfalls", "Common Pitfalls & Safety...");
+                        self.menu_item(ui, "help_planned", "Planned Extensions...");
+                        self.menu_item(ui, "help_catalog", "31 MCP Tools Reference...");
+                        self.menu_item(ui, "help_docs", "Project Files & Docs...");
+                        ui.separator();
+                        self.menu_item(ui, "file_pdf_brochure", "Open PDF Brochure");
+                        self.menu_item(ui, "file_epub_brochure", "Open EPUB Brochure");
+                        self.menu_item(ui, "file_html_brochure", "Open HTML5 Brochure");
+                        ui.separator();
+                        self.menu_item(ui, "help_licenses", "Licenses & Notices...");
+                        self.menu_item(ui, "help_about", "About WinCraft");
+                    })
+                    .response;
+
+                switch_on_hover(ui.ctx(), &[file, edit, view, commands, window, help]);
+
+                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                    ui.label(
+                        RichText::new("Safe Rust (0 unsafe)")
+                            .color(Color32::from_rgb(34, 197, 94))
+                            .small(),
+                    );
+                });
+            });
+        });
+    }
+
+    fn render_sub_header(&mut self, ui: &mut egui::Ui) {
+        ui.horizontal(|ui| {
+            ui.heading(
+                RichText::new("WinCraft")
+                    .color(Color32::from_rgb(103, 232, 249))
+                    .strong(),
+            );
+            ui.label(RichText::new("v0.2.0").color(Color32::GRAY).small());
+
+            ui.separator();
+
+            let is_admin = wiztree::is_elevated();
+            if is_admin {
+                ui.label(
+                    RichText::new("🛡️ [Admin]")
+                        .color(Color32::from_rgb(34, 197, 94))
+                        .strong(),
+                );
+            } else if ui
+                .button(
+                    RichText::new("👤 [User - Click to Elevate]")
+                        .color(Color32::from_rgb(245, 158, 11))
+                        .strong(),
+                )
+                .on_hover_text("Relaunch elevated via UAC for raw MFT direct-read access")
+                .clicked()
+            {
+                let _ = self.menu_action("file_relaunch_admin");
+            }
+
+            ui.separator();
+
+            let ro_label = if self.opts.read_only {
+                "🔒 Read-Only: ON"
+            } else {
+                "🔓 Read-Only: OFF"
+            };
+            let ro_color = if self.opts.read_only {
+                Color32::from_rgb(56, 189, 248)
+            } else {
+                Color32::GRAY
+            };
+            if ui
+                .selectable_label(self.opts.read_only, RichText::new(ro_label).color(ro_color))
+                .on_hover_text("Click to toggle read-only guard")
+                .clicked()
+            {
+                let _ = self.menu_action("edit_toggle_readonly");
+            }
+
+            let arm_label = if self.arm_confirm {
+                "⚠️ Confirm: ARMED"
+            } else {
+                "🛡️ Confirm: SAFE"
+            };
+            let arm_color = if self.arm_confirm {
+                Color32::from_rgb(245, 158, 11)
+            } else {
+                Color32::GRAY
+            };
+            if ui
+                .selectable_label(self.arm_confirm, RichText::new(arm_label).color(arm_color))
+                .on_hover_text("Click to toggle mutation confirmation gate")
+                .clicked()
+            {
+                let _ = self.menu_action("edit_toggle_confirm");
+            }
+
+            ui.separator();
+
+            if ui
+                .button("🔄 Refresh")
+                .on_hover_text("Refresh all host metrics (F5)")
+                .clicked()
+            {
+                let _ = self.menu_action("cmd_refresh_telemetry");
+            }
+
+            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                let zoom_pct = (ui.ctx().zoom_factor() * 100.0).round() as i32;
+                if ui
+                    .button(format!("{zoom_pct}%"))
+                    .on_hover_text("UI zoom (Ctrl+Wheel). Click to reset to 100%.")
+                    .clicked()
+                {
+                    ui.ctx().set_zoom_factor(1.0);
+                }
+
+                theme_toggle_button(ui, &mut self.dark_mode);
+
+                ui.separator();
+
+                if ui
+                    .selectable_label(self.view_mode == OutputFormat::Json, "{ } JSON")
+                    .clicked()
+                {
+                    self.view_mode = OutputFormat::Json;
+                }
+                if ui
+                    .selectable_label(self.view_mode == OutputFormat::List, "☰ Table")
+                    .clicked()
+                {
+                    self.view_mode = OutputFormat::List;
+                }
+                if ui
+                    .selectable_label(self.view_mode == OutputFormat::Cards, "🗂 Cards")
+                    .clicked()
+                {
+                    self.view_mode = OutputFormat::Cards;
+                }
+                ui.label(RichText::new("View:").color(Color32::GRAY).small());
+            });
+        });
+    }
+
+    fn render_nav_bar(&mut self, ui: &mut egui::Ui) {
+        ui.horizontal_wrapped(|ui| {
+            for p in Page::all() {
+                let is_selected = self.page == p;
+                let text = if is_selected {
+                    RichText::new(p.label())
+                        .strong()
+                        .color(Color32::from_rgb(56, 189, 248))
+                } else {
+                    RichText::new(p.label()).color(Color32::from_rgb(203, 213, 225))
+                };
+                if ui.selectable_label(is_selected, text).clicked() {
+                    self.page = p;
+                    self.page_num = 1;
+                    self.sort_col = 0;
+                }
+            }
+        });
+    }
+
+    fn render_status_bar(&mut self, ui: &mut egui::Ui) {
+        ui.horizontal(|ui| {
+            ui.label(
+                RichText::new(&self.last_message)
+                    .color(Color32::from_rgb(167, 243, 208))
+                    .monospace()
+                    .small(),
+            );
+            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                ui.label(
+                    RichText::new(format!("Workspace: {}", self.page.label()))
+                        .color(Color32::GRAY)
+                        .small(),
+                );
+                ui.separator();
+                let admin_str = if wiztree::is_elevated() {
+                    "Admin"
+                } else {
+                    "User"
+                };
+                ui.label(
+                    RichText::new(format!("Mode: {admin_str}"))
+                        .color(if wiztree::is_elevated() {
+                            Color32::from_rgb(34, 197, 94)
+                        } else {
+                            Color32::from_rgb(245, 158, 11)
+                        })
+                        .small(),
+                );
+            });
+        });
+    }
+
+    fn render_active_dialog(&mut self, ctx: &egui::Context) {
+        let Some(dialog) = self.active_dialog else {
+            return;
+        };
+        let title = match dialog {
+            StudioDialog::CommandPalette => "Command Palette",
+            StudioDialog::Shortcuts => "Keyboard Shortcuts",
+            StudioDialog::Docs => "WinCraft Help & Documentation",
+            StudioDialog::Licenses => "Licenses & Notices",
+            StudioDialog::About => "About WinCraft",
+            StudioDialog::Safety => "WinCraft Safety Invariants",
+            StudioDialog::Preferences => "Preferences",
+        };
+        let mut open = true;
+        egui::Window::new(title)
+            .open(&mut open)
+            .default_width(680.0)
+            .default_height(480.0)
+            .show(ctx, |ui| match dialog {
+                StudioDialog::CommandPalette => {
+                    ui.label("Type to filter commands. Press Enter or click to execute:");
+                    let text_edit = ui.text_edit_singleline(&mut self.palette_query);
+                    if text_edit.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter)) {
+                        let q = self.palette_query.to_ascii_lowercase();
+                        if let Some((id, _, _)) = MENU_CATALOG.iter().find(|(id, label, _)| {
+                            q.is_empty()
+                                || label.to_ascii_lowercase().contains(&q)
+                                || id.contains(&q)
+                        }) {
+                            let _ = self.menu_action(id);
+                            self.active_dialog = None;
+                            return;
+                        }
+                    }
+                    ui.separator();
+                    egui::ScrollArea::vertical()
+                        .max_height(350.0)
+                        .show(ui, |ui| {
+                            let q = self.palette_query.to_ascii_lowercase();
+                            for (id, label, shortcut) in MENU_CATALOG {
+                                if !q.is_empty()
+                                    && !label.to_ascii_lowercase().contains(&q)
+                                    && !id.contains(&q)
+                                {
+                                    continue;
+                                }
+                                ui.horizontal(|ui| {
+                                    if ui.button(*label).clicked() {
+                                        let _ = self.menu_action(id);
+                                        let opens_dialog = matches!(
+                                            *id,
+                                            "help_palette"
+                                                | "help_shortcuts"
+                                                | "help_getting_started"
+                                                | "help_usage"
+                                                | "help_tips"
+                                                | "help_pitfalls"
+                                                | "help_planned"
+                                                | "help_catalog"
+                                                | "help_docs"
+                                                | "help_licenses"
+                                                | "help_about"
+                                                | "win_toggle_safety"
+                                                | "edit_preferences"
+                                        );
+                                        if !opens_dialog {
+                                            self.active_dialog = None;
+                                        }
+                                    }
+                                    if !shortcut.is_empty() {
+                                        ui.label(
+                                            RichText::new(*shortcut).color(Color32::GRAY).small(),
+                                        );
+                                    }
+                                });
+                            }
+                        });
+                }
+                StudioDialog::Shortcuts => {
+                    ui.heading("Keyboard Shortcuts Reference");
+                    ui.separator();
+                    egui::Grid::new("shortcuts_grid")
+                        .striped(true)
+                        .min_col_width(120.0)
+                        .show(ui, |ui| {
+                            ui.label(RichText::new("Shortcut").strong());
+                            ui.label(RichText::new("Command / Action").strong());
+                            ui.end_row();
+
+                            for (_, label, shortcut) in MENU_CATALOG {
+                                if shortcut.is_empty() {
+                                    continue;
+                                }
+                                ui.monospace(*shortcut);
+                                ui.label(*label);
+                                ui.end_row();
+                            }
+                            ui.monospace("Ctrl + MouseWheel");
+                            ui.label("Global UI Zoom Factor (0.6x - 2.5x)");
+                            ui.end_row();
+                        });
+                }
+                StudioDialog::Docs => {
+                    ui.horizontal(|ui| {
+                        for (tab_id, tab_label) in [
+                            ("start", "1. Get Started"),
+                            ("functions", "2. Functions"),
+                            ("usage", "3. Usage (GUI/CLI/MCP)"),
+                            ("tips", "4. Tips & Tricks"),
+                            ("pitfalls", "5. Pitfalls & Safety"),
+                            ("planned", "6. Planned Extensions"),
+                            ("catalog", "7. 31 MCP Tools"),
+                        ] {
+                            if ui
+                                .selectable_label(self.docs_tab == tab_id, tab_label)
+                                .clicked()
+                            {
+                                self.docs_tab = tab_id;
+                            }
+                        }
+                    });
+                    ui.separator();
+                    egui::ScrollArea::vertical()
+                        .max_height(400.0)
+                        .show(ui, |ui| match self.docs_tab {
+                            "start" => {
+                                ui.heading("Getting Started with WinCraft");
+                                ui.label("WinCraft is a pure-Rust, zero-tax ArtCraft 3-tier desktop workstation and MCP server for Windows systems administration.");
+                                ui.add_space(8.0);
+                                ui.label("Step 1: Check host telemetry on Page 1 (Host & Disks) to inspect mount volumes and free storage.");
+                                ui.label("Step 2: If on Windows with UAC, use 'Relaunch as Admin' to unlock raw NTFS direct-read MFT access.");
+                                ui.label("Step 3: Scan high-speed disk usage on Page 10 (MFT Cushion Treemap) to instantly visualize space hogs.");
+                                ui.label("Step 4: Use Page 4 (RAM Weeder) to find orphaned cargo test or zombie dev processes and safely reclaim RAM.");
+                                ui.label("Step 5: Inspect file locks on Page 6 (Lock Inspector) via Windows Restart Manager before file operations.");
+                            }
+                            "functions" => {
+                                ui.heading("Core Subsystems & Capabilities");
+                                ui.label("• WizTree NTFS MFT Engine: Direct disk volume parsing for sub-second file cataloging and hierarchical treemaps.");
+                                ui.label("• RAM Working Set Weeder: Detects zombie engines, abandoned test runners, and memory hogs with safe allowlist.");
+                                ui.label("• Restart Manager Lock Inspector: FFI integration with rstrtmgr.dll to identify which processes lock any file.");
+                                ui.label("• High-Speed FileOps: 3-stage streaming SHA-256 duplicate detection, fast grep, and mandatory .bak backups.");
+                                ui.label("• NSSM Service & SysAdmin: Safe sc.exe control, HKCU registry editor with auto .reg snapshots.");
+                            }
+                            "usage" => {
+                                ui.heading("Usage across Workstation, CLI & MCP");
+                                ui.label("Workstation (GUI): Immediate-mode GPU rendering with Cards default view, live sorting, filtering, and export.");
+                                ui.label("CLI: Run 'wincraft <verb> --format cards|list|json' for scriptable terminal output.");
+                                ui.label("MCP Server: Run 'wincraft mcp' on stdio for LLM tools integration (Claude Desktop, Cursor, Antigravity).");
+                            }
+                            "tips" => {
+                                ui.heading("Tips & Tricks for Maximum Performance");
+                                ui.label("• Use Ctrl+K anytime to summon the fuzzy-matching Command Palette.");
+                                ui.label("• Click on any cushion treemap tile to drill down into that directory's tree.");
+                                ui.label("• Ctrl+Wheel zooms the entire interface smoothly on your GPU.");
+                                ui.label("• In Cards view, click card action pills to jump directly to FileOps or process inspection.");
+                            }
+                            "pitfalls" => {
+                                ui.heading("Common Pitfalls & Safety Invariants");
+                                ui.label("• Mutating operations (weeder_reap, reg_write, svc_control) require Arm Confirm Gate.");
+                                ui.label("• Read-Only Guard completely neutralizes write operations across CLI, MCP, and GUI.");
+                                ui.label("• Protected processes (csrss, lsass, svchost, explorer, nssm, pwsh) can never be terminated.");
+                                ui.label("• NSSM services are restarted with service manager (sc.exe stop/start), NEVER by taskkilling children.");
+                            }
+                            "planned" => {
+                                ui.heading("Planned Extensions");
+                                ui.label("- Volume Shadow Copy (VSS) snapshot browser for historical file diffing.");
+                                ui.label("- Integration with DevCraft / Containercraft fleet containers.");
+                            }
+                            "catalog" => {
+                                ui.heading("31 MCP Tools Catalog");
+                                for t in tools_catalog() {
+                                    ui.horizontal(|ui| {
+                                        ui.monospace(
+                                            RichText::new(t.name)
+                                                .strong()
+                                                .color(Color32::from_rgb(56, 189, 248)),
+                                        );
+                                        if t.confirm_gated {
+                                            ui.label(
+                                                RichText::new("[Mutating]")
+                                                    .color(Color32::from_rgb(245, 158, 11))
+                                                    .small(),
+                                            );
+                                        } else {
+                                            ui.label(
+                                                RichText::new("[Read-Only]")
+                                                    .color(Color32::from_rgb(34, 197, 94))
+                                                    .small(),
+                                            );
+                                        }
+                                    });
+                                    ui.label(RichText::new(t.description).small());
+                                    ui.add_space(4.0);
+                                }
+                            }
+                            _ => {}
+                        });
+                }
+                StudioDialog::Licenses => {
+                    ui.heading("Licenses & Open Source Notices");
+                    ui.label("WinCraft is dual-licensed under MIT OR Apache-2.0.");
+                    ui.label("Built with 100% Safe Rust: #![forbid(unsafe_code)] across wincraft-app.");
+                    ui.label("Zero unwrap(), zero expect(), zero panic! in production paths.");
+                }
+                StudioDialog::About => {
+                    ui.heading("WinCraft v0.2.0");
+                    ui.label("Pure-Rust Windows Host, RAM Weeder, FileOps & SysAdmin Studio.");
+                    ui.label("Part of the Storytold ArtCraft Ecosystem.");
+                    ui.separator();
+                    ui.label("Author: Sandra Schipal (Vienna)");
+                    ui.label("Host Hardware: Goliath (AMD Ryzen 9 5900X, NVIDIA RTX 4090 24GB, 64GB RAM)");
+                }
+                StudioDialog::Safety => {
+                    ui.heading("WinCraft Safety Invariants & Architecture");
+                    ui.label("1. Default View is Cards, switchable to Table or JSON, with filtering and export.");
+                    ui.label("2. Protected system processes (csrss, lsass, svchost, explorer, nssm, pwsh) can never be reaped.");
+                    ui.label("3. Every file edit creates a timestamped .bak backup; registry edits export .reg snapshots.");
+                    ui.label("4. NSSM services are controlled strictly via sc.exe stop/start.");
+                }
+                StudioDialog::Preferences => {
+                    ui.heading("Workstation Preferences");
+                    ui.checkbox(&mut self.dark_mode, "Dark Mode (Slate-950)");
+                    ui.separator();
+                    ui.label("Default Page Size:");
+                    for sz in [10, 25, 50, 100] {
+                        if ui
+                            .selectable_label(self.page_size == sz, sz.to_string())
+                            .clicked()
+                        {
+                            self.page_size = sz;
+                            self.page_num = 1;
+                        }
+                    }
+                    ui.separator();
+                    ui.checkbox(&mut self.show_kpi_ribbon, "Show Host KPI Ribbon");
+                    ui.checkbox(&mut self.opts.read_only, "Read-Only Guard");
+                    ui.checkbox(&mut self.arm_confirm, "Arm Confirm Gate");
+                }
+            });
+        if !open {
+            self.active_dialog = None;
         }
     }
 
@@ -1578,130 +2674,87 @@ impl WinCraftApp {
 
 impl eframe::App for WinCraftApp {
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
-        handle_zoom(ui.ctx());
+        let ctx = ui.ctx().clone();
+        handle_zoom(&ctx);
         if !self.theme_applied {
-            apply_craft_theme(ui.ctx());
+            apply_craft_theme(&ctx);
             self.theme_applied = true;
         }
 
-        // Top Header Bar
-        ui.horizontal_wrapped(|ui| {
-            ui.heading(
-                RichText::new("WinCraft v0.2.0")
-                    .color(Color32::from_rgb(103, 232, 249))
-                    .strong(),
-            );
-            theme_toggle_button(ui, &mut self.dark_mode);
-            let zoom_pct = (ui.ctx().zoom_factor() * 100.0).round() as i32;
-            if ui
-                .button(format!("{zoom_pct}%"))
-                .on_hover_text("UI zoom (Ctrl+Wheel). Click to reset to 100%.")
-                .clicked()
-            {
-                ui.ctx().set_zoom_factor(1.0);
+        // Global hotkeys
+        let mut trigger_action: Option<&'static str> = None;
+        let mut zoom_delta = 0.0_f32;
+        ctx.input(|i| {
+            if (i.modifiers.ctrl || i.modifiers.command) && i.key_pressed(egui::Key::K) {
+                trigger_action = Some("help_palette");
             }
-            ui.separator();
-            let is_admin = wiztree::is_elevated();
-            if is_admin {
-                ui.label(
-                    RichText::new("🛡️ [Admin]")
-                        .color(Color32::from_rgb(34, 197, 94))
-                        .strong(),
-                );
+            if i.key_pressed(egui::Key::F1) {
+                trigger_action = Some("help_shortcuts");
+            }
+            if i.key_pressed(egui::Key::F5) {
+                trigger_action = Some("cmd_refresh_telemetry");
+            }
+            if (i.modifiers.ctrl || i.modifiers.command) && i.key_pressed(egui::Key::Q) {
+                trigger_action = Some("file_quit");
+            }
+            if (i.modifiers.ctrl || i.modifiers.command) && i.key_pressed(egui::Key::Num1) {
+                zoom_delta = 1.0;
+            }
+            if (i.modifiers.ctrl || i.modifiers.command)
+                && (i.key_pressed(egui::Key::Plus) || i.key_pressed(egui::Key::Equals))
+            {
+                zoom_delta = 1.1;
+            }
+            if (i.modifiers.ctrl || i.modifiers.command) && i.key_pressed(egui::Key::Minus) {
+                zoom_delta = 1.0 / 1.1;
+            }
+            if (i.modifiers.ctrl || i.modifiers.command) && i.key_pressed(egui::Key::M) {
+                trigger_action = Some("file_scan_mft");
+            }
+            if (i.modifiers.ctrl || i.modifiers.command) && i.key_pressed(egui::Key::Comma) {
+                trigger_action = Some("edit_preferences");
+            }
+        });
+
+        if let Some(action) = trigger_action {
+            let _ = self.menu_action(action);
+        }
+        if zoom_delta > 0.0 {
+            if (zoom_delta - 1.0).abs() < f32::EPSILON {
+                ctx.set_zoom_factor(1.0);
             } else {
-                ui.label(RichText::new("👤 [User]").color(Color32::from_rgb(245, 158, 11)));
-                if ui
-                    .button(
-                        RichText::new("🛡️ Relaunch as Admin")
-                            .color(Color32::from_rgb(245, 158, 11))
-                            .strong(),
-                    )
-                    .on_hover_text("Restart elevated via UAC for raw MFT direct-read access")
-                    .clicked()
-                {
-                    if let Ok(exe) = std::env::current_exe() {
-                        let _ = std::process::Command::new("powershell")
-                            .args([
-                                "-Command",
-                                &format!("Start-Process '{}' -Verb RunAs", exe.display()),
-                            ])
-                            .spawn();
-                        ui.ctx().send_viewport_cmd(egui::ViewportCommand::Close);
-                    }
-                }
+                let next = (ctx.zoom_factor() * zoom_delta).clamp(0.6, 2.5);
+                ctx.set_zoom_factor(next);
             }
-            ui.separator();
-            ui.checkbox(&mut self.opts.read_only, "Read-Only Guard");
-            ui.checkbox(&mut self.arm_confirm, "Arm Confirm Gate");
-            ui.separator();
-            if ui.button("🔄 Refresh Telemetry").clicked() {
-                self.status_json = self.exec(&Command::Status).ok();
-                self.weeder_json = self.exec(&Command::WeederScan).ok();
-            }
-            if ui.button("📖 PDF Brochure").clicked() {
-                let p = self.brochure_dir.join("wincraft-brochure.pdf");
-                self.open_external_file(&p);
-            }
-            if ui.button("📚 EPUB Brochure").clicked() {
-                let p = self.brochure_dir.join("wincraft-brochure.epub");
-                self.open_external_file(&p);
-            }
-            if ui
-                .button(if self.show_help_modal {
-                    "✕ Hide Safety"
-                } else {
-                    "? Safety & Architecture"
-                })
-                .clicked()
-            {
-                self.show_help_modal = !self.show_help_modal;
-            }
-            ui.separator();
-            ui.label(
-                RichText::new(&self.last_message)
-                    .color(Color32::from_rgb(167, 243, 208))
-                    .monospace(),
-            );
-        });
-
-        ui.add_space(3.0);
-        self.render_kpi_ribbon(ui);
-        ui.separator();
-
-        // Navigation Bar
-        ui.horizontal_wrapped(|ui| {
-            for p in [
-                Page::Dashboard,
-                Page::ProcsAndPorts,
-                Page::CpuAuditAndThermals,
-                Page::RamWeeder,
-                Page::FileOps,
-                Page::LockInspector,
-                Page::ServicesNssm,
-                Page::StartupAndRegistry,
-                Page::DoctorAndHelp,
-                Page::DiskTreemap,
-            ] {
-                if ui.selectable_label(self.page == p, p.label()).clicked() {
-                    self.page = p;
-                    self.page_num = 1;
-                    self.sort_col = 0;
-                }
-            }
-        });
-
-        if self.show_help_modal {
-            ui.separator();
-            ui.group(|ui| {
-                ui.heading("WinCraft Safety Invariants & ArtCraft 3-Tier Architecture");
-                ui.label("WinCraft subsumes windows-operations-mcp, system-admin-mcp, sysinternals-mcp, filesystem-mcp, and winrar-mcp into one pure-Rust ArtCraft 3-tier binary.");
-                ui.label("1. Default View is Cards, switchable at any time to List/Table or JSON, with live filtering, numeric-aware sorting, pagination, and CSV/MD/TXT/JSON export.");
-                ui.label("2. Protected system processes (csrss, lsass, svchost, explorer, nssm, pwsh, etc.) can never be reaped.");
-                ui.label("3. Every file edit creates a timestamped .bak backup; every HKCU registry edit exports a .reg snapshot first.");
-                ui.label("4. NSSM services are controlled strictly via sc.exe stop/start.");
-            });
         }
 
+        if self.quit_requested {
+            ctx.send_viewport_cmd(egui::ViewportCommand::Close);
+            self.quit_requested = false;
+        }
+
+        // Top Menu Bar (Pinned)
+        self.render_menu_bar(ui);
+
+        // Desktop Sub-Header Bar (Title, Elevation badge, Guard pills, Refresh, View Mode, Theme, Zoom)
+        self.render_sub_header(ui);
+        ui.separator();
+
+        // Optional Host KPI Ribbon
+        if self.show_kpi_ribbon {
+            self.render_kpi_ribbon(ui);
+            ui.separator();
+        }
+
+        // Navigation Bar
+        self.render_nav_bar(ui);
+        ui.separator();
+
+        // Active Dialogs Modal (Command Palette, Shortcuts, Docs, About, etc.)
+        self.render_active_dialog(&ctx);
+
+        // Bottom Status Bar
+        self.render_status_bar(ui);
         ui.separator();
 
         egui::ScrollArea::vertical().show(ui, |ui| match self.page {
@@ -1805,7 +2858,7 @@ impl eframe::App for WinCraftApp {
                 }
             }
             Page::RamWeeder => {
-                ui.heading("RAM Weeder — Orphan Cargo Test & Zombie Engine Detector");
+                ui.heading("RAM Weeder -- Orphan Cargo Test & Zombie Engine Detector");
                 ui.horizontal(|ui| {
                     if ui.button("🧹 Run Weeder Scan").clicked() {
                         self.weeder_json = self.exec(&Command::WeederScan).ok();
@@ -2001,7 +3054,7 @@ fn main() {
 
     let native_options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
-            .with_title("WinCraft — Windows Host, RAM Weeder, FileOps & SysAdmin Studio")
+            .with_title("WinCraft -- Windows Host, RAM Weeder, FileOps & SysAdmin Studio")
             .with_inner_size([1280.0, 820.0]),
         ..Default::default()
     };
@@ -2215,5 +3268,68 @@ mod tests {
                 eprintln!("MINI {line}");
             }
         }
+    }
+
+    #[test]
+    fn menu_catalog_contains_standard_entries_and_pages() {
+        assert!(MENU_CATALOG.len() >= 30);
+        let ids: Vec<&str> = MENU_CATALOG.iter().map(|(id, _, _)| *id).collect();
+        assert!(ids.contains(&"file_scan_mft"));
+        assert!(ids.contains(&"file_export_csv"));
+        assert!(ids.contains(&"file_relaunch_admin"));
+        assert!(ids.contains(&"file_quit"));
+        assert!(ids.contains(&"edit_filter"));
+        assert!(ids.contains(&"edit_toggle_readonly"));
+        assert!(ids.contains(&"edit_toggle_confirm"));
+        assert!(ids.contains(&"view_mode_cards"));
+        assert!(ids.contains(&"view_mode_table"));
+        assert!(ids.contains(&"view_mode_json"));
+        assert!(ids.contains(&"cmd_refresh_telemetry"));
+        assert!(ids.contains(&"help_palette"));
+        assert!(ids.contains(&"help_shortcuts"));
+        assert!(ids.contains(&"help_about"));
+        assert_eq!(Page::all().len(), 10);
+    }
+
+    #[test]
+    fn menu_actions_update_app_state() {
+        let mut app = WinCraftApp::default();
+
+        assert_eq!(app.view_mode, OutputFormat::Cards);
+        assert!(app.menu_action("view_mode_table").is_ok());
+        assert_eq!(app.view_mode, OutputFormat::List);
+        assert!(app.menu_action("view_mode_json").is_ok());
+        assert_eq!(app.view_mode, OutputFormat::Json);
+        assert!(app.menu_action("view_mode_cards").is_ok());
+        assert_eq!(app.view_mode, OutputFormat::Cards);
+
+        assert!(!app.opts.read_only);
+        assert!(app.menu_action("edit_toggle_readonly").is_ok());
+        assert!(app.opts.read_only);
+
+        assert!(!app.arm_confirm);
+        assert!(app.menu_action("edit_toggle_confirm").is_ok());
+        assert!(app.arm_confirm);
+
+        assert_eq!(app.page, Page::Dashboard);
+        assert!(app.menu_action("view_page_10").is_ok());
+        assert_eq!(app.page, Page::DiskTreemap);
+
+        assert_eq!(app.active_dialog, None);
+        assert!(app.menu_action("help_palette").is_ok());
+        assert_eq!(app.active_dialog, Some(StudioDialog::CommandPalette));
+        assert!(app.menu_action("help_shortcuts").is_ok());
+        assert_eq!(app.active_dialog, Some(StudioDialog::Shortcuts));
+        assert!(app.menu_action("help_about").is_ok());
+        assert_eq!(app.active_dialog, Some(StudioDialog::About));
+    }
+
+    #[test]
+    fn ascii_hygiene_zero_em_dashes_in_source() {
+        let src = include_str!("main.rs");
+        assert!(
+            !src.contains('\u{2014}'),
+            "main.rs must not contain em dashes (U+2014)"
+        );
     }
 }
