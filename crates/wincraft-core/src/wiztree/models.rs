@@ -63,13 +63,7 @@ pub struct TreemapNode {
     pub children: Vec<TreemapNode>,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
-pub struct LayoutRect {
-    pub x: f32,
-    pub y: f32,
-    pub w: f32,
-    pub h: f32,
-}
+pub use cushion_treemap::LayoutRect;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TreemapTile {

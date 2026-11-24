@@ -13,6 +13,7 @@ uuid = { workspace = true }
 zip = { workspace = true }
 csv = { workspace = true }
 windows-sys = { workspace = true }
+cushion-treemap = { version = "0.1.0", path = "../cushion-treemap" }
 
 [dev-dependencies]
 tempfile = { workspace = true }

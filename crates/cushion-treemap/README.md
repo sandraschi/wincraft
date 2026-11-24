@@ -15,8 +15,8 @@ disk treemap and generalized over any tree.
 | `tui-treemap` | yes | no | no (ratatui) |
 | **`cushion-treemap`** | yes | **yes** | yes |
 
-If you want WizTree-style nesting — folder boxes that visibly *contain*
-their files, hover tooltips with filename + size, click-to-zoom into folders —
+If you want WizTree-style nesting - folder boxes that visibly *contain*
+their files, hover tooltips with filename + size, click-to-zoom into folders -
 this is the crate.
 
 ## Use
@@ -37,10 +37,10 @@ let tiles = hierarchical_layout(&root, bounds, 5);
 // walk index_path back through your tree for hover/zoom.
 ```
 
-- `squarify_layout(&sizes, bounds)` — one flat level (Bruls et al. squarified).
-- `hierarchical_layout(&root, bounds, max_depth)` — enveloping containers + leaves.
-- `hierarchical_layout_with_options` — custom padding / header / depth tuning.
-- `color::{depth_color, extension_color}` — optional WizTree-style palette.
+- `squarify_layout(&sizes, bounds)` - one flat level (Bruls et al. squarified).
+- `hierarchical_layout(&root, bounds, max_depth)` - enveloping containers + leaves.
+- `hierarchical_layout_with_options` - custom padding / header / depth tuning.
+- `color::{depth_color, extension_color}` - optional WizTree-style palette.
 
 ## Rendering cushions (van Wijk style)
 
@@ -51,7 +51,7 @@ WinCraft's egui page is the reference implementation.
 ## Status
 
 - `0.1.0`: layout + colors + tests, no I/O, no renderer deps (only `serde`).
-- Not yet on crates.io — publish with `cargo publish -p cushion-treemap --dry-run` first.
+- Not yet on crates.io - publish with `cargo publish -p cushion-treemap --dry-run` first.
 
 ## License
 

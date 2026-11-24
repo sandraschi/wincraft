@@ -4,73 +4,17 @@ use super::models::{
 use std::collections::HashMap;
 use std::path::Path;
 
+/// Folder container color by depth. Delegates to the `cushion-treemap`
+/// crate so the app and the published crate share one palette.
+/// Kept under the historic name for API compatibility.
 pub fn get_folder_color(depth: usize) -> [u8; 3] {
-    match depth {
-        0 => [15, 23, 42], // slate 900
-        1 => [20, 30, 52], // deep slate
-        2 => [26, 38, 64], // dark slate blue
-        3 => [32, 46, 76],
-        _ => [38, 54, 88],
-    }
+    cushion_treemap::depth_color(depth)
 }
 
+/// File cushion color by extension. Delegates to the `cushion-treemap` crate.
+/// Kept under the historic name for API compatibility.
 pub fn get_extension_color(ext: &str, is_folder: bool) -> [u8; 3] {
-    if is_folder {
-        return [71, 85, 105]; // Slate
-    }
-    match ext.to_lowercase().as_str() {
-        // Video
-        "mp4" | "mkv" | "avi" | "mov" | "wmv" | "webm" | "m4v" | "flv" | "m2ts" => [168, 85, 247], // Purple
-        // Audio
-        "mp3" | "wav" | "flac" | "aac" | "ogg" | "m4a" | "wma" | "opus" => [192, 132, 252], // Violet
-
-        // Archives & Disk Images
-        "zip" | "rar" | "7z" | "tar" | "gz" | "bz2" | "xz" => [249, 115, 22], // Orange
-        "iso" | "img" | "vmdk" | "vhd" | "vhdx" | "wim" => [239, 68, 68],     // Red
-
-        // Executables & Binaries
-        "exe" | "msi" | "bat" | "cmd" | "ps1" => [34, 197, 94], // Green
-        "dll" | "sys" | "so" | "dylib" | "bin" => [16, 185, 129], // Emerald
-
-        // Documents & Web
-        "pdf" => [225, 29, 72], // Rose
-        "doc" | "docx" | "rtf" | "txt" | "md" | "log" => [56, 189, 248], // Sky
-        "xls" | "xlsx" | "csv" => [13, 148, 136], // Teal
-        "ppt" | "pptx" => [234, 88, 12], // Deep Orange
-
-        // AI / Models / Big Data
-        "safetensors" | "ckpt" | "onnx" | "gguf" | "pt" | "pth" => [236, 72, 153], // Fuchsia
-        "db" | "sqlite" | "sqlite3" | "mdf" | "ldf" | "parquet" => [245, 158, 11], // Amber
-
-        // Images
-        "png" | "jpg" | "jpeg" | "webp" | "gif" | "bmp" | "svg" | "ico" => [6, 182, 212], // Cyan
-
-        // Code
-        "rs" | "c" | "cpp" | "h" | "hpp" | "py" | "js" | "ts" | "jsx" | "tsx" | "go" | "java" => {
-            [99, 102, 241]
-        } // Indigo
-
-        // Deterministic hash into a vibrant palette
-        other => {
-            let mut h: u32 = 2166136261;
-            for b in other.bytes() {
-                h = (h ^ (b as u32)).wrapping_mul(16777619);
-            }
-            let palette: &[[u8; 3]] = &[
-                [56, 189, 248], // sky
-                [168, 85, 247], // purple
-                [34, 197, 94],  // green
-                [245, 158, 11], // amber
-                [244, 63, 94],  // rose
-                [14, 165, 233], // light blue
-                [20, 184, 166], // teal
-                [234, 179, 8],  // yellow
-                [217, 70, 239], // fuchsia
-                [99, 102, 241], // indigo
-            ];
-            palette[(h as usize) % palette.len()]
-        }
-    }
+    cushion_treemap::extension_color(ext, is_folder)
 }
 
 pub fn build_file_tree(scan_root: &str, records: &[FileRecord]) -> TreeNode {
@@ -265,147 +209,24 @@ pub fn analyze_disk_records(
     }
 }
 
-#[derive(Clone, Copy)]
-struct SquarifyItem {
-    index: usize,
-    area: f64,
+/// File-system adapter: WinCraft's [`TreeNode`] is a [`cushion_treemap::TreemapTree`].
+/// Children are kept largest-first by `compute_tree_sizes`, which the layout relies on.
+impl cushion_treemap::TreemapTree for TreeNode {
+    fn treemap_size(&self) -> u64 {
+        self.size
+    }
+    fn treemap_children(&self) -> &[Self] {
+        &self.children
+    }
 }
 
-fn worst_aspect_ratio(row: &[SquarifyItem], side_len: f64) -> f64 {
-    if row.is_empty() || side_len <= 0.0 {
-        return f64::MAX;
+/// Walk an [`cushion_treemap::Tile`] `index_path` back to the owning node.
+fn node_at_path<'a>(root: &'a TreeNode, path: &[usize]) -> Option<&'a TreeNode> {
+    let mut node = root;
+    for step in path {
+        node = node.children.get(*step)?;
     }
-    let mut row_area = 0.0;
-    let mut min_area = f64::MAX;
-    let mut max_area = 0.0;
-    for item in row {
-        row_area += item.area;
-        if item.area < min_area {
-            min_area = item.area;
-        }
-        if item.area > max_area {
-            max_area = item.area;
-        }
-    }
-    if row_area <= 0.0 || min_area <= 0.0 {
-        return f64::MAX;
-    }
-    let side_sq = side_len * side_len;
-    let row_area_sq = row_area * row_area;
-    let r1 = (side_sq * max_area) / row_area_sq;
-    let r2 = row_area_sq / (side_sq * min_area);
-    r1.max(r2)
-}
-
-fn squarify_tree_children(
-    children: &[&TreeNode],
-    bounds: LayoutRect,
-    total_size: u64,
-) -> Vec<LayoutRect> {
-    if children.is_empty() || bounds.w <= 0.0 || bounds.h <= 0.0 || total_size == 0 {
-        return vec![bounds; children.len()];
-    }
-
-    let total_area = (bounds.w as f64) * (bounds.h as f64);
-    let items: Vec<SquarifyItem> = children
-        .iter()
-        .enumerate()
-        .map(|(idx, c)| {
-            let area = (c.size as f64 / total_size as f64) * total_area;
-            SquarifyItem { index: idx, area }
-        })
-        .collect();
-
-    let mut remaining = bounds;
-    let mut rects = vec![
-        LayoutRect {
-            x: 0.0,
-            y: 0.0,
-            w: 0.0,
-            h: 0.0
-        };
-        children.len()
-    ];
-    let mut current_row: Vec<SquarifyItem> = Vec::new();
-
-    for item in items {
-        if current_row.is_empty() {
-            current_row.push(item);
-        } else {
-            let mut candidate = current_row.clone();
-            candidate.push(item);
-            let side_len = (remaining.w as f64).min(remaining.h as f64);
-            let cur_worst = worst_aspect_ratio(&current_row, side_len);
-            let cand_worst = worst_aspect_ratio(&candidate, side_len);
-            if cand_worst <= cur_worst {
-                current_row.push(item);
-            } else {
-                layout_row_to_rects(&current_row, &mut remaining, &mut rects);
-                current_row = vec![item];
-            }
-        }
-    }
-
-    if !current_row.is_empty() {
-        layout_row_to_rects(&current_row, &mut remaining, &mut rects);
-    }
-
-    rects
-}
-
-fn layout_row_to_rects(row: &[SquarifyItem], remaining: &mut LayoutRect, rects: &mut [LayoutRect]) {
-    if row.is_empty() || remaining.w <= 0.0 || remaining.h <= 0.0 {
-        return;
-    }
-    let row_area: f64 = row.iter().map(|i| i.area).sum();
-    if row_area <= 0.0 {
-        return;
-    }
-
-    let horizontal_split = remaining.w >= remaining.h;
-    if horizontal_split {
-        // Vertical strip of width W
-        let strip_w = ((row_area / (remaining.h as f64)) as f32).min(remaining.w);
-        let mut cur_y = remaining.y;
-        for (i, item) in row.iter().enumerate() {
-            let item_h = if i == row.len() - 1 {
-                (remaining.y + remaining.h - cur_y).max(0.0)
-            } else {
-                ((item.area / row_area) * (remaining.h as f64)) as f32
-            };
-
-            rects[item.index] = LayoutRect {
-                x: remaining.x,
-                y: cur_y,
-                w: strip_w,
-                h: item_h,
-            };
-            cur_y += item_h;
-        }
-        remaining.x += strip_w;
-        remaining.w = (remaining.w - strip_w).max(0.0);
-    } else {
-        // Horizontal strip of height H
-        let strip_h = ((row_area / (remaining.w as f64)) as f32).min(remaining.h);
-        let mut cur_x = remaining.x;
-        for (i, item) in row.iter().enumerate() {
-            let item_w = if i == row.len() - 1 {
-                (remaining.x + remaining.w - cur_x).max(0.0)
-            } else {
-                ((item.area / row_area) * (remaining.w as f64)) as f32
-            };
-
-            rects[item.index] = LayoutRect {
-                x: cur_x,
-                y: remaining.y,
-                w: item_w,
-                h: strip_h,
-            };
-            cur_x += item_w;
-        }
-        remaining.y += strip_h;
-        remaining.h = (remaining.h - strip_h).max(0.0);
-    }
+    Some(node)
 }
 
 #[derive(Debug, Clone, Default)]
@@ -419,102 +240,57 @@ pub fn compute_hierarchical_treemap(
     bounds: LayoutRect,
     max_depth: usize,
 ) -> HierarchicalTreemapLayout {
+    // `LayoutRect` is re-exported from `cushion-treemap`, so bounds pass straight through.
+    let tiles = cushion_treemap::hierarchical_layout_with_options(
+        root,
+        bounds,
+        &cushion_treemap::LayoutOptions {
+            max_depth,
+            ..Default::default()
+        },
+    );
     let mut layout = HierarchicalTreemapLayout::default();
-    layout_node_recursive(root, bounds, 0, max_depth, &mut layout, "");
-    layout
-}
-
-fn layout_node_recursive(
-    node: &TreeNode,
-    rect: LayoutRect,
-    depth: usize,
-    max_depth: usize,
-    layout: &mut HierarchicalTreemapLayout,
-    parent_path: &str,
-) {
-    if rect.w <= 0.0 || rect.h <= 0.0 {
-        return;
-    }
-
-    if node.is_folder {
-        // Record enveloping folder box (for depth > 0)
-        if depth > 0 {
+    for tile in tiles {
+        let Some(node) = node_at_path(root, &tile.index_path) else {
+            continue;
+        };
+        let parent_path = tile
+            .index_path
+            .split_last()
+            .map_or_else(String::new, |(_, parent)| {
+                node_at_path(root, parent)
+                    .map(|p| p.path.clone())
+                    .unwrap_or_default()
+            });
+        // Empty folders surface as leaf slots in the generic layout; keep
+        // WinCraft's historic shape by filing them as folder tiles.
+        if tile.is_container || node.is_folder {
             layout.folder_tiles.push(TreemapTile {
                 name: node.name.clone(),
                 path: node.path.clone(),
                 size: node.size,
                 is_folder: true,
                 extension: String::new(),
-                rect,
-                color_rgb: get_folder_color(depth),
-                depth,
-                parent_path: parent_path.to_string(),
+                rect: tile.rect,
+                color_rgb: get_folder_color(tile.depth),
+                depth: tile.depth,
+                parent_path,
+            });
+        } else {
+            layout.file_tiles.push(TreemapTile {
+                name: node.name.clone(),
+                path: node.path.clone(),
+                size: node.size,
+                is_folder: false,
+                extension: node.extension.clone(),
+                rect: tile.rect,
+                color_rgb: get_extension_color(&node.extension, false),
+                depth: tile.depth,
+                parent_path,
             });
         }
-
-        // Check if we should recurse into children
-        if depth >= max_depth || node.children.is_empty() || rect.w < 12.0 || rect.h < 12.0 {
-            return;
-        }
-
-        // Folder envelope padding: children sit inside this padding!
-        let pad = if depth == 0 { 2.0 } else { 3.0 };
-        let header_h = if depth > 0 && rect.w > 65.0 && rect.h > 36.0 {
-            14.0
-        } else {
-            0.0
-        };
-
-        let inner_rect = LayoutRect {
-            x: rect.x + pad,
-            y: rect.y + pad + header_h,
-            w: (rect.w - 2.0 * pad).max(0.0),
-            h: (rect.h - 2.0 * pad - header_h).max(0.0),
-        };
-
-        if inner_rect.w < 4.0 || inner_rect.h < 4.0 {
-            return;
-        }
-
-        let non_empty_children: Vec<&TreeNode> =
-            node.children.iter().filter(|c| c.size > 0).collect();
-
-        if non_empty_children.is_empty() {
-            return;
-        }
-
-        let total_size: u64 = non_empty_children.iter().map(|c| c.size).sum();
-        if total_size == 0 {
-            return;
-        }
-
-        // Layout all children inside the parent inner_rect
-        let child_rects = squarify_tree_children(&non_empty_children, inner_rect, total_size);
-
-        for (child_node, child_rect) in non_empty_children.iter().zip(child_rects) {
-            layout_node_recursive(
-                child_node,
-                child_rect,
-                depth + 1,
-                max_depth,
-                layout,
-                &node.path,
-            );
-        }
-    } else {
-        // Leaf file cushion
-        layout.file_tiles.push(TreemapTile {
-            name: node.name.clone(),
-            path: node.path.clone(),
-            size: node.size,
-            is_folder: false,
-            extension: node.extension.clone(),
-            rect,
-            color_rgb: get_extension_color(&node.extension, false),
-            depth,
-            parent_path: parent_path.to_string(),
-        });
     }
+    layout
 }
 
 pub fn generate_treemap_html(title: &str, records: &[FileRecord]) -> String {

@@ -2170,7 +2170,7 @@ impl WinCraftApp {
             });
         });
 
-        // Drive selector strip — wraps to as many lines as needed, never pushes buttons off-screen
+        // Drive selector strip - wraps to as many lines as needed, never pushes buttons off-screen
         ui.horizontal_wrapped(|ui| {
             ui.label(RichText::new("Drive:").color(Color32::GRAY));
             for d in &fixed_drives {
@@ -2191,7 +2191,7 @@ impl WinCraftApp {
             }
         });
 
-        // Actions row — always on its own line so Scan can never be pushed off-screen
+        // Actions row - always on its own line so Scan can never be pushed off-screen
         ui.horizontal_wrapped(|ui| {
             if ui
                 .button(RichText::new("⚡ Scan MFT Drive").strong())
@@ -2267,7 +2267,7 @@ impl WinCraftApp {
             tree_root
         };
 
-        // Breadcrumb Navigation — wraps so deep paths never push Zoom Out off-screen
+        // Breadcrumb Navigation - wraps so deep paths never push Zoom Out off-screen
         let mut next_zoom_path: Option<Option<String>> = None;
         ui.horizontal_wrapped(|ui| {
             ui.label(RichText::new("Location:").color(Color32::GRAY).small());
@@ -2305,7 +2305,7 @@ impl WinCraftApp {
             self.treemap_zoom_path = target;
         }
 
-        // Top Category Legend — wraps to second line on narrow windows
+        // Top Category Legend - wraps to second line on narrow windows
         ui.horizontal_wrapped(|ui| {
             ui.label(RichText::new("File Types:").color(Color32::GRAY).small());
             let legend_items = [
@@ -2631,7 +2631,7 @@ impl WinCraftApp {
             }
         }
 
-        // Bottom Inspector Bar — two wrapped rows so long paths never push buttons off-screen
+        // Bottom Inspector Bar - two wrapped rows so long paths never push buttons off-screen
         ui.add_space(4.0);
         ui.vertical(|ui| {
             if let Some(tile) = &self.treemap_selected_tile {
