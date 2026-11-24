@@ -1,5 +1,6 @@
 [workspace]
 members = [
+    "crates/cushion-treemap",
     "crates/wincraft-core",
     "crates/wincraft-mcp",
     "crates/wincraft-app",
