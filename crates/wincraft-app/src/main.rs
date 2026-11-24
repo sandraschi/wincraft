@@ -2148,14 +2148,30 @@ impl WinCraftApp {
         let fixed_drives = wiztree::list_fixed_drives();
         let is_elevated = wiztree::is_elevated();
 
+        // Header: title row (short, never overflows) + wrapping drive strip + always-visible actions row
         ui.horizontal(|ui| {
             ui.heading(
                 RichText::new("🗺️ Hierarchical Cushion Treemap")
                     .strong()
                     .color(Color32::from_rgb(56, 189, 248)),
             );
-            ui.add_space(8.0);
+            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                if let Some(summary) = &self.treemap_summary {
+                    let total_gb = (summary.total_size_bytes as f64) / 1_073_741_824.0;
+                    ui.label(
+                        RichText::new(format!(
+                            "{:.2} GB Scanned ({} files)",
+                            total_gb, summary.total_files
+                        ))
+                        .strong()
+                        .color(Color32::WHITE),
+                    );
+                }
+            });
+        });
 
+        // Drive selector strip — wraps to as many lines as needed, never pushes buttons off-screen
+        ui.horizontal_wrapped(|ui| {
             ui.label(RichText::new("Drive:").color(Color32::GRAY));
             for d in &fixed_drives {
                 let can_mft = wiztree::can_read_mft(&d.root);
@@ -2173,10 +2189,14 @@ impl WinCraftApp {
                     self.treemap_selected_tile = None;
                 }
             }
+        });
 
-            ui.separator();
-
-            if ui.button("⚡ Scan MFT Drive").clicked() {
+        // Actions row — always on its own line so Scan can never be pushed off-screen
+        ui.horizontal_wrapped(|ui| {
+            if ui
+                .button(RichText::new("⚡ Scan MFT Drive").strong())
+                .clicked()
+            {
                 let drive_target = self.treemap_drive.clone();
                 match wiztree::scan_drive_usage(&drive_target, 5000) {
                     Ok(records) => {
@@ -2207,25 +2227,16 @@ impl WinCraftApp {
                         .spawn();
                 }
             }
-
-            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                if let Some(summary) = &self.treemap_summary {
-                    let total_gb = (summary.total_size_bytes as f64) / 1_073_741_824.0;
-                    ui.label(
-                        RichText::new(format!(
-                            "{:.2} GB Scanned ({} files)",
-                            total_gb, summary.total_files
-                        ))
-                        .strong()
-                        .color(Color32::WHITE),
-                    );
-                }
-            });
+            ui.label(
+                RichText::new("Tip: click a folder tile to zoom in, breadcrumb to zoom out.")
+                    .color(Color32::DARK_GRAY)
+                    .small(),
+            );
         });
 
         if !is_elevated {
             ui.add_space(2.0);
-            ui.horizontal(|ui| {
+            ui.horizontal_wrapped(|ui| {
                 ui.label(RichText::new("ℹ️ User Privilege Notice:").color(Color32::from_rgb(245, 158, 11)).strong());
                 ui.label("Running as standard user. For instant 1-second MFT scans on restricted drives (C:\\, D:\\), click '🛡️ Relaunch as Admin' in the top header.");
             });
@@ -2256,9 +2267,9 @@ impl WinCraftApp {
             tree_root
         };
 
-        // Breadcrumb Navigation
+        // Breadcrumb Navigation — wraps so deep paths never push Zoom Out off-screen
         let mut next_zoom_path: Option<Option<String>> = None;
-        ui.horizontal(|ui| {
+        ui.horizontal_wrapped(|ui| {
             ui.label(RichText::new("Location:").color(Color32::GRAY).small());
             if ui
                 .button(RichText::new(format!("📁 Root ({})", tree_root.name)).small())
@@ -2286,19 +2297,16 @@ impl WinCraftApp {
                 }
             }
 
-            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                if self.treemap_zoom_path.is_some() && ui.button("⬆️ Zoom Out to Root").clicked()
-                {
-                    next_zoom_path = Some(None);
-                }
-            });
+            if self.treemap_zoom_path.is_some() && ui.button("⬆️ Zoom Out to Root").clicked() {
+                next_zoom_path = Some(None);
+            }
         });
         if let Some(target) = next_zoom_path {
             self.treemap_zoom_path = target;
         }
 
-        // Top Category Legend
-        ui.horizontal(|ui| {
+        // Top Category Legend — wraps to second line on narrow windows
+        ui.horizontal_wrapped(|ui| {
             ui.label(RichText::new("File Types:").color(Color32::GRAY).small());
             let legend_items = [
                 ("Videos (.mp4, .mkv)", Color32::from_rgb(168, 85, 247)),
@@ -2623,32 +2631,28 @@ impl WinCraftApp {
             }
         }
 
-        // Bottom Inspector Bar
+        // Bottom Inspector Bar — two wrapped rows so long paths never push buttons off-screen
         ui.add_space(4.0);
-        ui.horizontal(|ui| {
+        ui.vertical(|ui| {
             if let Some(tile) = &self.treemap_selected_tile {
-                let size_str = format_bytes(tile.size);
-                let icon = if tile.is_folder { "📁" } else { "📄" };
-                ui.label(RichText::new(format!("{icon} {}", tile.name)).strong());
-                ui.label(
-                    RichText::new(format!("• {size_str}"))
-                        .color(Color32::from_rgb(56, 189, 248))
-                        .strong(),
-                );
-                ui.label(
-                    RichText::new(format!("• {}", tile.path))
-                        .color(Color32::from_rgb(148, 163, 184))
-                        .small(),
-                );
-
-                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    if ui.button("📂 Reveal in Explorer").clicked() {
-                        let _ = std::process::Command::new("explorer")
-                            .args(["/select,", &tile.path])
-                            .spawn();
-                    }
-                    if ui.button("📋 Copy Path").clicked() {
-                        ui.ctx().copy_text(tile.path.clone());
+                ui.horizontal_wrapped(|ui| {
+                    let size_str = format_bytes(tile.size);
+                    let icon = if tile.is_folder { "📁" } else { "📄" };
+                    ui.label(RichText::new(format!("{icon} {}", tile.name)).strong());
+                    ui.label(
+                        RichText::new(format!("• {size_str}"))
+                            .color(Color32::from_rgb(56, 189, 248))
+                            .strong(),
+                    );
+                    ui.label(
+                        RichText::new(format!("• {}", tile.path))
+                            .color(Color32::from_rgb(148, 163, 184))
+                            .small(),
+                    );
+                });
+                ui.horizontal_wrapped(|ui| {
+                    if tile.is_folder && ui.button("🔍 Zoom In").clicked() {
+                        self.treemap_zoom_path = Some(tile.path.clone());
                     }
                     if ui
                         .button("🔒 Who Locks This?")
@@ -2658,8 +2662,13 @@ impl WinCraftApp {
                         self.lock_path = tile.path.clone();
                         self.page = Page::LockInspector;
                     }
-                    if tile.is_folder && ui.button("🔍 Zoom In").clicked() {
-                        self.treemap_zoom_path = Some(tile.path.clone());
+                    if ui.button("📋 Copy Path").clicked() {
+                        ui.ctx().copy_text(tile.path.clone());
+                    }
+                    if ui.button("📂 Reveal in Explorer").clicked() {
+                        let _ = std::process::Command::new("explorer")
+                            .args(["/select,", &tile.path])
+                            .spawn();
                     }
                 });
             } else {
