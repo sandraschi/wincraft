@@ -5,7 +5,7 @@
 ![MCP stdio](https://img.shields.io/badge/MCP-stdio-purple)
 ![ArtCraft harness](https://img.shields.io/badge/ArtCraft-harness-green)
 
-Pure-Rust Windows host, RAM Weeder, Restart Manager file-lock inspector, high-speed FileOps, and NSSM-safe SysAdmin studio (`v0.1.0`).
+Pure-Rust Windows host, RAM Weeder, Restart Manager file-lock inspector, high-speed FileOps, and NSSM-safe SysAdmin studio (`v0.3.0`).
 
 Subsumes `windows-operations-mcp`, `system-admin-mcp` (RAM Weeder), `sysinternals-mcp`, `filesystem-mcp`, `winrar-mcp`, the retired Python `filecraft` scaffold, and the vendored WizTree NTFS MFT engine (`wiztree`) for sub-second search and hierarchical enveloping cushion treemaps into one zero-tax ArtCraft 3-tier workspace (`wincraft-core`, `wincraft-mcp`, `wincraft-app`).
 

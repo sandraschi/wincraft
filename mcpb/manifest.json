@@ -140,6 +140,18 @@
     {
       "name": "win_thermal_status",
       "description": "Query host CPU load percentage, core topology, clock speeds, and thermal throttle heuristics."
+    },
+    {
+      "name": "win_mft_search",
+      "description": "Sub-second NTFS Master File Table (MFT) wildcard file search across single or all fixed drives."
+    },
+    {
+      "name": "win_disk_usage",
+      "description": "Fast MFT-based disk space consumption summary, top largest files, and extension breakdown."
+    },
+    {
+      "name": "win_treemap",
+      "description": "Generate self-contained interactive D3.js hierarchical cushion treemap HTML."
     }
   ]
 }

@@ -1,12 +1,25 @@
 # Changelog
 
-## [Unreleased] - T1 floor
+## [0.3.0] - 2026-11-26
+
+First tagged release (no prior tags; workspace version 0.1.0 covered
+ v0.1.0 and v0.2.0 scope below, now consolidated under v0.3.0).
 
 ### Added
+- MFT storage tools (`win_mft_search` sub-second NTFS wildcard search, `win_disk_usage` space and extension summary, `win_treemap` self-contained D3 cushion HTML) and L3 Page 10 hierarchical cushion treemap with breadcrumb drill-down and in-app Relaunch as Admin.
+- Publishable `cushion-treemap` crate (squarified hierarchical layout); `wincraft-core` treemap delegates to it.
+- Craft menu bar standard in `wincraft-app` (`File` through `Help`), Command Palette (`Ctrl+K`), Keyboard Shortcuts (`F1`), Help Center, bottom status bar, elevation pill.
+- Light theme plus dark theme (vector Sun/Moon toggle) with Ctrl+wheel zoom (0.6x to 2.5x).
+- T2 floor: 29 core integration tests (57 total: 18 core unit + 29 integration + 2 mcp + 8 app).
 - CI: `.github/workflows/rust-ci.yml` (fmt, clippy `-D warnings`, `cargo test --workspace`).
 - README feature matrix (Implemented / Partial / Planned).
 - LF guarantee: `fs_backup_write` and exports normalize CRLF/CR to LF.
-- Tests: backup-write LF roundtrip, LF mixed-endings unit, export LF roundtrip, `OutputFormat` parse/extension, T2 integration suite (53 total: 17 core unit + 29 core integration + 2 mcp + 5 app).
+- `mcpb/manifest.json` regenerated from the live server (31 tools).
+- LICENSE-MIT and LICENSE-APACHE (MIT OR Apache-2.0).
+
+### Fixed
+- MCP protocol version string 2024-11-05 to 2026-07-28.
+- Treemap header wrapping; Scan action always visible.
 
 ## [0.2.0] - 2026-11-11
 

@@ -3053,7 +3053,7 @@ fn main() {
             && app.exec(&Command::Doctor).is_ok()
             && app.view_mode == OutputFormat::Cards;
         if ok {
-            println!("smoke: ok (wincraft-app 0.1.0, default_view=cards)");
+            println!("smoke: ok (wincraft-app 0.3.0, default_view=cards)");
             std::process::exit(0);
         } else {
             eprintln!("smoke: failed");

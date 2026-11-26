@@ -4296,7 +4296,7 @@ dependencies = [
 
 [[package]]
 name = "wincraft-app"
-version = "0.1.0"
+version = "0.3.0"
 dependencies = [
  "eframe",
  "serde",
@@ -4307,7 +4307,7 @@ dependencies = [
 
 [[package]]
 name = "wincraft-core"
-version = "0.1.0"
+version = "0.3.0"
 dependencies = [
  "chrono",
  "csv",
@@ -4322,7 +4322,7 @@ dependencies = [
 
 [[package]]
 name = "wincraft-mcp"
-version = "0.1.0"
+version = "0.3.0"
 dependencies = [
  "clap",
  "serde",
