@@ -19,7 +19,10 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts\install-craft.ps1
 
 Installs the Windows app and the CLI (Start Menu shortcut, CLI on the user PATH). `-RegisterClients` also registers the MCP exe with the IDEs that are installed. `-Clients cursor,claude-desktop` limits that list. `-Mcpb` installs the Claude Desktop extension bundle.
 
-## Technical Brochure & Operator Handbook (`docs/brochure/`)
+## Technical Brochure & Operator Handbook (`docs/brochure/` & `HELP.md`)
+
+- **Operator Guide:** [`HELP.md`](HELP.md) -- 7-section walkthrough (Get Started, Functions, GUI/CLI/MCP Usage, Tips & Tricks, Safety Invariants, Planned Extensions, Ecosystem).
+- **Crate Docs:** [`crates/wincraft-core/README.md`](crates/wincraft-core/README.md) (L1), [`crates/wincraft-mcp/README.md`](crates/wincraft-mcp/README.md) (L2 CLI + MCP), [`crates/wincraft-app/README.md`](crates/wincraft-app/README.md) (L3 egui), [`crates/cushion-treemap/README.md`](crates/cushion-treemap/README.md) (treemap layout engine).
 
 WinCraft ships a BookCraft-compiled brochure suite in [`docs/brochure/`](docs/brochure/) following `mcp-central-docs/standards/CRAFT_BROCHURE_STANDARD.md`:
 - [`docs/brochure/wincraft-brochure.pdf`](docs/brochure/wincraft-brochure.pdf) -- Print-ready A4 PDF brochure with vector architecture SVG, subsystem cards, and full 26-tool matrix.
